@@ -10,7 +10,6 @@
   
 
 <p align="center">
-  [![License: GPL v3](https://img.shields.io/badge/License-GPL%20v3-blue.svg)](LICENSE)
   <img src="https://img.shields.io/badge/Platform-Android-green" alt="Android">
   <img src="https://img.shields.io/badge/Language-Kotlin-purple" alt="Kotlin">
   <img src="https://img.shields.io/badge/Internet-Not%20Required-blue" alt="Offline">
