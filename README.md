@@ -8,9 +8,9 @@
   A simple, private, and completely offline date calculator and reminder app for Android.
   <br>
   
-  [![License: GPL v3](https://img.shields.io/badge/License-GPL%20v3-blue.svg)](LICENSE)
 
 <p align="center">
+  [![License: GPL v3](https://img.shields.io/badge/License-GPL%20v3-blue.svg)](LICENSE)
   <img src="https://img.shields.io/badge/Platform-Android-green" alt="Android">
   <img src="https://img.shields.io/badge/Language-Kotlin-purple" alt="Kotlin">
   <img src="https://img.shields.io/badge/Internet-Not%20Required-blue" alt="Offline">
