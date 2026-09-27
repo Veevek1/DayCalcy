@@ -14,6 +14,7 @@
   <img src="https://img.shields.io/badge/Language-Kotlin-purple" alt="Kotlin">
   <img src="https://img.shields.io/badge/Internet-Not%20Required-blue" alt="Offline">
   <img src="https://img.shields.io/github/v/release/Veevek1/DayCalcy" alt="Latest Release">
+  <img src="https://img.shields.io/badge/License-GPL%20v3-blue.svg" alt="License: GPL v3">
 </p>
 
 <p align="center">
