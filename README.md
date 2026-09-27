@@ -7,6 +7,7 @@
 <p align="center">
   A simple, private, and completely offline date calculator and reminder app for Android.
   <br>
+  
   [![License: GPL v3](https://img.shields.io/badge/License-GPL%20v3-blue.svg)](LICENSE)
 
 <p align="center">
