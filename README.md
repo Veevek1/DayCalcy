@@ -142,15 +142,15 @@ DayCalcy works completely offline.
 
 | | |
 |---|---|
-| ![Screenshot 1](Screenshot/2026-09-21-00-08-49-80_ba86c378142edb3e7ed210b1a2a98334.jpg) | ![Screenshot 2](Screenshot/2026-09-21-00-09-31-10_ba86c378142edb3e7ed210b1a2a98334.jpg) |
-| ![Screenshot 3](Screenshot/2026-09-21-00-10-22-88_ba86c378142edb3e7ed210b1a2a98334.jpg) | ![Screenshot 4](Screenshot/2026-09-21-00-10-33-29_ba86c378142edb3e7ed210b1a2a98334.jpg) |
+| ![Screenshot 1](screenshot/2026-09-21-00-08-49-80_ba86c378142edb3e7ed210b1a2a98334.jpg) | ![Screenshot 2](screenshot/2026-09-21-00-09-31-10_ba86c378142edb3e7ed210b1a2a98334.jpg) |
+| ![screenshot 3](Screenshot/2026-09-21-00-10-22-88_ba86c378142edb3e7ed210b1a2a98334.jpg) | ![Screenshot 4](screenshot/2026-09-21-00-10-33-29_ba86c378142edb3e7ed210b1a2a98334.jpg) |
 
 ### Reminders & Widgets
 
 | | |
 |---|---|
-| ![Screenshot 5](Screenshot/2026-09-21-00-13-20-31_ba86c378142edb3e7ed210b1a2a98334.jpg) | ![Screenshot 6](Screenshot/2026-09-21-00-13-49-81_ba86c378142edb3e7ed210b1a2a98334.jpg) |
-| ![Screenshot 7](Screenshot/2026-09-21-00-15-25-32_b783bf344239542886fee7b48fa4b892.jpg) | ![Screenshot 8](Screenshot/2026-09-21-00-16-17-55_ba86c378142edb3e7ed210b1a2a98334.jpg) |
+| ![Screenshot 5](screenshot/2026-09-21-00-13-20-31_ba86c378142edb3e7ed210b1a2a98334.jpg) | ![Screenshot 6](screenshot/2026-09-21-00-13-49-81_ba86c378142edb3e7ed210b1a2a98334.jpg) |
+| ![Screenshot 7](screenshot/2026-09-21-00-15-25-32_b783bf344239542886fee7b48fa4b892.jpg) | ![Screenshot 8](screenshot/2026-09-21-00-16-17-55_ba86c378142edb3e7ed210b1a2a98334.jpg) |
 
 ### History & Calendar
 
