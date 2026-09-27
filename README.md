@@ -156,7 +156,7 @@ DayCalcy works completely offline.
 
 | | |
 |---|---|
-| ![History](Screenshot/1.jpg) | ![Calendar](Screenshot/2.jpg) |
+| ![History](screenshot/1.jpg) | ![Calendar](screenshot/2.jpg) |
 
 ## Download
 
