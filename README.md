@@ -143,7 +143,7 @@ DayCalcy works completely offline.
 | | |
 |---|---|
 | ![Screenshot 1](screenshot/2026-09-21-00-08-49-80_ba86c378142edb3e7ed210b1a2a98334.jpg) | ![Screenshot 2](screenshot/2026-09-21-00-09-31-10_ba86c378142edb3e7ed210b1a2a98334.jpg) |
-| ![screenshot 3](Screenshot/2026-09-21-00-10-22-88_ba86c378142edb3e7ed210b1a2a98334.jpg) | ![Screenshot 4](screenshot/2026-09-21-00-10-33-29_ba86c378142edb3e7ed210b1a2a98334.jpg) |
+| ![screenshot 3](screenshot/2026-09-21-00-10-22-88_ba86c378142edb3e7ed210b1a2a98334.jpg) | ![Screenshot 4](screenshot/2026-09-21-00-10-33-29_ba86c378142edb3e7ed210b1a2a98334.jpg) |
 
 ### Reminders & Widgets
 
