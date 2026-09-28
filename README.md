@@ -17,9 +17,6 @@
   <img src="https://img.shields.io/badge/License-GPL%20v3-blue.svg" alt="License: GPL v3">
 </p>
 
-<p align="center">
-  <strong>Current version: 3.42.8</strong>
-</p>
 
 ---
 
