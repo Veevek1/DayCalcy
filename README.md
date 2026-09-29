@@ -172,8 +172,10 @@ For older versions, visit the [Releases](../../releases) page.
 
 ## License
 
-Licensed under the GNU General Public License v3.0.
-See [LICENSE](LICENSE) for details.
+Copyright © 2026 Vivek
+
+DayCalcy is licensed under the GNU General Public License v3.0.
+See the  [LICENSE](LICENSE) file for the full license text.
 
 ## Branding
 
