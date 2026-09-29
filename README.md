@@ -178,9 +178,9 @@ see the [LICENSE](LICENSE) file for details.
 > [!WARNING]
 > **Brand & Naming Guidelines**
 >
-> The source code is freely available under the GPL-3.0. However, **DayCalcy** and
-> the **DayCalcy logo** are the branding of the DayCalcy project.
+> The source code is freely available under the GPL-3.0. **DayCalcy** and the
+> **DayCalcy logo** are the branding of the DayCalcy project.
 >
-> Forks, modified versions, and unofficial builds are permitted under the GPL-3.0,
-> but they should not use the **DayCalcy** name or logo in a way that implies they
-> are the official or endorsed DayCalcy project.
+> Forks, modified versions, and unofficial builds are allowed under the GPL-3.0.
+> However, they should not use the **DayCalcy** name or logo in a way that
+> suggests they are the official or endorsed DayCalcy project.
