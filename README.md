@@ -173,3 +173,10 @@ For older versions, visit the [Releases](../../releases) page.
 
 Licensed under the GNU General Public License v3.0.
 See [LICENSE](LICENSE) for details.
+
+## Branding
+
+DayCalcy and the DayCalcy logo are the branding of the DayCalcy project.
+The source code is licensed under GPL-3.0.
+The GPL-3.0 license does not grant permission to use the project's
+name or logo to imply an official or endorsed version.
