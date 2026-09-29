@@ -3,6 +3,7 @@
 </p>
 
 <h1 align="center">DayCalcy</h1>
+![DayCalcy Official Project](assets/daycalcy-official-project.png)
 
 <p align="center">
   A simple, private, and completely offline date calculator and reminder app for Android.
