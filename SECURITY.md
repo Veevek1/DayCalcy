@@ -1,12 +1,10 @@
-# Security Policy
-
 ## Supported Versions
 
 Security fixes are considered for the latest released version of DayCalcy.
 
 | Version | Supported |
 |---|---|
-| 3.42.8 | Yes |
+| 3.42.9 | Yes |
 | Older versions | No |
 
 ## Reporting a Security Issue
