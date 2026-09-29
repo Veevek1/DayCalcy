@@ -8,7 +8,9 @@
   A simple, private, and completely offline date calculator and reminder app for Android.
   <br>
   
-
+<p align="center">
+  <img src="assets/daycalcy-official-project.png" width="320" alt="DayCalcy Official Project">
+</p>
 <p align="center">
   <img src="https://img.shields.io/badge/Platform-Android-green" alt="Android">
   <img src="https://img.shields.io/badge/Language-Kotlin-purple" alt="Kotlin">
