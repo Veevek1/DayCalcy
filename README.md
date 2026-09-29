@@ -172,14 +172,15 @@ For older versions, visit the [Releases](../../releases) page.
 
 ## License
 
-Copyright © 2026 Vivek
+This project's source code is licensed under the **GNU General Public License v3.0** —
+see the [LICENSE](LICENSE) file for details.
 
-DayCalcy is licensed under the GNU General Public License v3.0.
-See the  [LICENSE](LICENSE) file for the full license text.
-
-## Branding
-
-DayCalcy and the DayCalcy logo are the branding of the DayCalcy project.
-The source code is licensed under GPL-3.0.
-The GPL-3.0 license does not grant permission to use the project's
-name or logo to imply an official or endorsed version.
+> [!WARNING]
+> **Brand & Naming Guidelines**
+>
+> The source code is freely available under the GPL-3.0. However, **DayCalcy** and
+> the **DayCalcy logo** are the branding of the DayCalcy project.
+>
+> Forks, modified versions, and unofficial builds are permitted under the GPL-3.0,
+> but they should not use the **DayCalcy** name or logo in a way that implies they
+> are the official or endorsed DayCalcy project.
