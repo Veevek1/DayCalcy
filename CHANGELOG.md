@@ -2,23 +2,15 @@
 
 ## 3.42.9
 
-Changelog
-
-Duration Calculator
-
-• Added a new Duration Calculator as the 6th main calculator, with Date Reminder remaining as the 7th.
-
+### Duration Calculator
+-Added a new Duration Calculator as the 6th main calculator, with Date Reminder remaining as the 7th.
 Calculates elapsed time between two dates and times, including overnight and multi-day durations.
-
-Added optional break-time deduction with
-
+-Added optional break-time deduction with
 validation.
+-Duration calculations are saved to History and can be reopened.
 
-Duration calculations are saved to History and can be reopened.
-
-About
-
-Removed the "Thank you for using DayCalcy!" message and refined the About dialog spacing and Changelog row.
+### About
+-Removed the "Thank you for using DayCalcy!" message and refined the About dialog spacing and Changelog row.
 
 ## 3.42.8
 
