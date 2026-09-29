@@ -1,0 +1,5 @@
+DayCalcy is a simple, private and completely offline app for date and time calculations.
+
+Calculate the number of days between dates, add or subtract days, calculate age, compare dates and work with time durations.
+
+DayCalcy works without an internet connection and does not require online services.
