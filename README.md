@@ -161,8 +161,9 @@ DayCalcy works completely offline.
 <p align="center">
   <a href="https://github.com/Veevek1/DayCalcy/releases/latest">
     <img
-      src="https://img.shields.io/badge/DOWNLOAD-LATEST%20APK-2ea44f?style=for-the-badge&logo=android&logoColor=white"
-      alt="Download Latest APK">
+      src="https://img.shields.io/badge/DOWNLOAD-LATEST%20APK-2ea44f?style=for-the-badge&logo=android&logoColor=white&labelColor=555555"
+      alt="Download Latest APK"
+      height="60">
   </a>
 </p>
 
@@ -171,15 +172,11 @@ DayCalcy works completely offline.
     <img
       src="https://raw.githubusercontent.com/ImranR98/Obtainium/main/assets/graphics/badge_obtainium.png"
       alt="Get it on Obtainium"
-      height="80">
+      height="100">
   </a>
-  
 </p>
 
 For older versions, visit the <a href="https://github.com/Veevek1/DayCalcy/releases">Releases</a> page.
-
-</p>
-
 ## License
 
 This project's source code is licensed under the **GNU General Public License v3.0** —
