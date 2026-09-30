@@ -170,13 +170,13 @@ The app works completely offline after installation.
 
 For older versions, visit the [Releases](../../releases) page.
 
-<p align="center">
-  <a href="https://apps.obtainium.imranr.dev/redirect.html?r=obtainium://add/https://github.com/Veevek1/DayCalcy">
-    <img
-      src="https://raw.githubusercontent.com/ImranR98/Obtainium/main/assets/graphics/badge_obtainium.png"
-      alt="Get it on Obtainium"
-      height="80">
-  </a>
+<a href="https://apps.obtainium.imranr.dev/redirect?r=obtainium://add/https://github.com/Veevek1/DayCalcy">
+  <img
+    src="https://raw.githubusercontent.com/ImranR98/Obtainium/main/assets/graphics/badge_obtainium.png"
+    alt="Get it on Obtainium"
+    height="80">
+</a>
+
 </p>
 
 ## License
