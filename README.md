@@ -177,6 +177,7 @@ DayCalcy works completely offline.
 </p>
 
 For older versions, visit the <a href="https://github.com/Veevek1/DayCalcy/releases">Releases</a> page.
+
 ## License
 
 This project's source code is licensed under the **GNU General Public License v3.0** —
