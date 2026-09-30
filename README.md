@@ -158,23 +158,25 @@ DayCalcy works completely offline.
 
 ## Download
 
-<<p align="center">
+<p align="center">
   <a href="https://github.com/Veevek1/DayCalcy/releases/latest">
     <img
-      src="https://img.shields.io/badge/Download-Latest%20APK-2ea44f?style=for-the-badge&logo=android&logoColor=white"
+      src="https://img.shields.io/badge/DOWNLOAD-LATEST%20APK-2ea44f?style=for-the-badge&logo=android&logoColor=white"
       alt="Download Latest APK">
   </a>
+</p>
+
+<p align="center">
   <a href="https://apps.obtainium.imranr.dev/redirect?r=obtainium://add/https://github.com/Veevek1/DayCalcy">
     <img
       src="https://raw.githubusercontent.com/ImranR98/Obtainium/main/assets/graphics/badge_obtainium.png"
       alt="Get it on Obtainium"
-      height="40">
+      height="80">
   </a>
-
   
 </p>
-For older versions, visit the [Releases](../../releases) page.
 
+For older versions, visit the <a href="https://github.com/Veevek1/DayCalcy/releases">Releases</a> page.
 
 </p>
 
