@@ -170,10 +170,9 @@ DayCalcy works completely offline.
 <p align="center">
   <a href="https://apps.obtainium.imranr.dev/redirect?r=obtainium://add/https://github.com/Veevek1/DayCalcy">
     <img
-      src="https://raw.githubusercontent.com/ImranR98/Obtainium/main/assets/graphics/badge_obtainium.png"
-      alt="Get it on Obtainium"
-      height="100">
-  </a>
+      <a href="https://github.com/Veevek1/Day-Calculator/releases/latest">
+  <img src="assets/104741.jpg" alt="Get it on GitHub" width="300">
+</a>
 </p>
 
 For older versions, visit the <a href="https://github.com/Veevek1/DayCalcy/releases">Releases</a> page.
