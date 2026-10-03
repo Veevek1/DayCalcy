@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DayCalcy Privacy Policy</title>
+<style>
+  body { font-family: Arial, Helvetica, sans-serif; line-height: 1.6; max-width: 700px; margin: 0 auto; padding: 20px 16px 40px; color: #222; background: #fff; }
+  h1 { font-size: 1.6rem; margin-bottom: 4px; }
+  h2 { font-size: 1.1rem; margin-top: 28px; }
+  .date { color: #666; font-size: 0.9rem; margin-top: 0; }
+  @media (prefers-color-scheme: dark) { body { background: #121212; color: #ddd; } .date { color: #999; } a { color: #8ab4f8; } }
+</style>
+</head>
+<body>
+
+<h1>DayCalcy Privacy Policy</h1>
+<p class="date">Last updated: 3 October 2026</p>
+
+<p>This page explains what DayCalcy (package name com.daycalculator.dynamic.app) does with your information. The short version is that it doesn't do anything with it. I don't collect your data and nothing from the app is sent to me or anyone else.</p>
+
+<h2>What the app stores</h2>
+<p>When you add a date or set a reminder, it is saved on your phone, inside the app's own storage. That's all. There is no sign-up, no account and no server behind the app. The app doesn't even ask for internet permission, so it has no way of sending your data out.</p>
+
+<h2>Permissions</h2>
+<p>DayCalcy asks for three permissions, all for reminders:</p>
+<ul>
+  <li>Notifications, so the app can show you a reminder.</li>
+  <li>Exact alarms, so a reminder goes off at the time you picked and not a few minutes late.</li>
+  <li>Run at startup, so your reminders are set up again after you restart your phone or update the app.</li>
+</ul>
+<p>None of these are used to read or collect anything.</p>
+
+<h2>Ads and tracking</h2>
+<p>There are no ads, no analytics and no crash reporting tools in the app. The About screen has a link to the project page on GitHub. If you open it, you leave the app and GitHub's own privacy policy applies there.</p>
+
+<h2>Backups</h2>
+<p>If you have Android backup turned on, your phone may back up the app's data to your Google account like it does for other apps. That is controlled by your phone settings and Google's terms, not by me. Uninstalling the app deletes the data stored on your device.</p>
+
+<h2>Children</h2>
+<p>The app doesn't collect anything from anyone, so that includes children too.</p>
+
+<h2>If this changes</h2>
+<p>If a later version of the app collects any data, I'll update this page first and change the date at the top.</p>
+
+<h2>Contact</h2>
+<p>Questions about this policy? Email me at daycalcy@gmail.com<br>
+DayCalcy Developer</p>
+
+</body>
+</html>
