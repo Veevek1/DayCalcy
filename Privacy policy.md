@@ -1,5 +1,5 @@
 ## DayCalcy Privacy Policy
-##### Last updated: 3 October 2026
+ Last updated: 3 October 2026
 
 This page explains what DayCalcy (package name com.daycalculator.dynamic.app) does with your information. The short version is that it doesn't do anything with it. I don't collect your data and nothing from the app is sent to me or anyone else.
 
