@@ -1,0 +1,11 @@
+<resources>
+    <!-- Widget theme: pure monochrome surface/text; green is reserved for progress. -->
+    <color name="widget_background">#000000</color>
+    <color name="widget_text">#F5F5F5</color>
+    <color name="widget_secondary">#BDBDBD</color>
+    <color name="widget_border">#00000000</color>
+    <color name="widget_refresh_background">#00000000</color>
+    <color name="widget_refresh_icon">#F5F5F5</color>
+    <color name="widget_ring_track">#444444</color>
+    <color name="widget_ring_accent">#69D38A</color>
+</resources>

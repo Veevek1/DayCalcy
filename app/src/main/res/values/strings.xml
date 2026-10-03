@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="reminder_widget_description">Shows your next saved date reminder</string>
+    <string name="wide_reminder_widget_description">Wide Date Reminder widget with full countdown and weekday</string>
+</resources>

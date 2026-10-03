@@ -1,0 +1,27 @@
+<resources>
+    <!-- Simple platform themes for the reminder time picker.
+         Keep these limited to public Android framework attributes so
+         resource linking works correctly on Android SDK 36. -->
+    <style name="Theme_DayCalculator_TimePicker_Light" parent="android:style/Theme.Material.Light.Dialog.Alert">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:colorAccent">#111111</item>
+        <item name="android:windowBackground">#FFFFFF</item>
+        <item name="android:textColorPrimary">#111111</item>
+        <item name="android:textColorSecondary">#666666</item>
+    </style>
+
+    <style name="Theme_DayCalculator_TimePicker_Dark" parent="android:style/Theme.Material.Dialog.Alert">
+        <item name="android:fontFamily">sans</item>
+        <!-- Keep the entire dark picker genuinely black instead of the default Material gray. -->
+        <item name="android:colorAccent">#FFFFFF</item>
+        <item name="android:colorBackground">#000000</item>
+        <item name="android:colorBackgroundFloating">#000000</item>
+        <item name="android:windowBackground">#000000</item>
+        <item name="android:panelColorBackground">#000000</item>
+        <item name="android:colorControlNormal">#FFFFFF</item>
+        <item name="android:colorControlActivated">#FFFFFF</item>
+        <item name="android:colorControlHighlight">#33FFFFFF</item>
+        <item name="android:textColorPrimary">#FFFFFF</item>
+        <item name="android:textColorSecondary">#D0D0D0</item>
+    </style>
+</resources>
