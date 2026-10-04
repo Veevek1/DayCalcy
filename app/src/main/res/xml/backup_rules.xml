@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 11 and below. Widget settings are keyed by widget ID, which changes
+     on a new phone, so they must not be restored. -->
+<full-backup-content>
+    <exclude domain="sharedpref" path="date_reminder_widgets.xml" />
+</full-backup-content>

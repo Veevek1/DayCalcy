@@ -1,6 +1,19 @@
 # Changelog
 
+## 3.43.2
+
+### Fixes
+- Calculator inputs and screens now survive screen rotation and process death.
+- Widget refresh no longer wakes the device every minute; the Play build uses an inexact alarm.
+- Added an adaptive launcher icon (with Android 13+ themed icon support) and legacy icons for older Android versions.
+- Reduced app size by removing duplicate 1024px icon images.
+- Backup now excludes widget settings and reschedules reminders automatically after a restore.
+- Cards in the About section are now easier to see in dark mode.
+
 ## 3.43.1
+
+### Build
+- Enabled R8 code shrinking, optimization, obfuscation, and resource shrinking for release builds, with required keep rules configured for runtime compatibility.
 
 ### About
 - Removed the Telegram link from About.
@@ -156,3 +169,4 @@
 ### UI
 - Reminder navigation now uses a soft, theme-aware highlight that follows the reminder dot color.
 - Reduced adaptive spacing before Tools so the Home screen stays clean without excessive empty space.
+�

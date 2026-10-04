@@ -30,8 +30,8 @@ android {
         applicationId = "com.daycalculator.dynamic.app"
         minSdk = 24
         targetSdk = 36
-        versionCode = 73
-        versionName = "3.43.1"
+        versionCode = 74
+        versionName = "3.43.2"
     }
 
     flavorDimensions += "distribution"
@@ -41,11 +41,15 @@ android {
             dimension = "distribution"
             buildConfigField("String", "GITHUB_DESCRIPTION", "\"For more information, check GitHub.\"")
             buildConfigField("boolean", "SHOW_CHANGELOG", "false")
+            buildConfigField("String", "PRIVACY_POLICY_URL", "\"https://sites.google.com/view/daycalcy-privacy-policy-\"")
+            buildConfigField("boolean", "EXACT_WIDGET_REFRESH", "false")
         }
         create("direct") {
             dimension = "distribution"
             buildConfigField("String", "GITHUB_DESCRIPTION", "\"For updates, check GitHub.\"")
             buildConfigField("boolean", "SHOW_CHANGELOG", "true")
+            buildConfigField("String", "PRIVACY_POLICY_URL", "\"\"")
+            buildConfigField("boolean", "EXACT_WIDGET_REFRESH", "true")
         }
     }
 

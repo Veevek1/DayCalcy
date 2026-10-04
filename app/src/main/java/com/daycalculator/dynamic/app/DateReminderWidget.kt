@@ -197,21 +197,23 @@ open class DateReminderWidget : AppWidgetProvider() {
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
 
-            // Schedule the next tick on the next minute boundary. Exact alarms are
-            // used when the app has the user's exact-alarm access, which keeps the
-            // countdown responsive. Without that access, fall back to an idle-safe
-            // inexact alarm rather than failing silently. The alarm is one-shot so
-            // every tick can be aligned again after Android delays the process.
+            // Schedule the next tick on the next minute boundary. These are
+            // NON-wakeup (RTC) alarms on purpose: the widget only needs to be
+            // fresh when the screen is on, so the device is never woken up just
+            // to redraw a countdown. If the phone is asleep, the alarm is
+            // delivered when it wakes, the widget redraws, and the next tick is
+            // aligned again. The Play build always uses an inexact alarm (exact
+            // alarms are reserved for the reminders themselves); the direct
+            // build uses a non-wakeup exact alarm when the user granted access.
             val now = System.currentTimeMillis()
             val nextMinute = ((now / 60_000L) + 1L) * 60_000L
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S &&
-                alarm.canScheduleExactAlarms()
-            ) {
-                alarm.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, nextMinute, pending)
-            } else if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
-                alarm.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, nextMinute, pending)
+            val canUseExact = BuildConfig.EXACT_WIDGET_REFRESH &&
+                (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.S ||
+                    alarm.canScheduleExactAlarms())
+            if (canUseExact) {
+                alarm.setExact(AlarmManager.RTC, nextMinute, pending)
             } else {
-                alarm.set(AlarmManager.RTC_WAKEUP, nextMinute, pending)
+                alarm.set(AlarmManager.RTC, nextMinute, pending)
             }
         }
 
