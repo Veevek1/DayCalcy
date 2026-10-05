@@ -30,8 +30,8 @@ android {
         applicationId = "com.daycalculator.dynamic.app"
         minSdk = 24
         targetSdk = 36
-        versionCode = 74
-        versionName = "3.43.2"
+        versionCode = 75
+        versionName = "3.43.3"
     }
 
     flavorDimensions += "distribution"
@@ -57,6 +57,9 @@ android {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
+            vcsInfo {
+                include = false
+            }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"

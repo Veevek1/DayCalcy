@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -598,6 +599,10 @@ fun DayCalculatorApp(
 
     BackHandler(enabled = selectedTool != null) { navigateBack() }
 
+    // Keep a separate scroll position for each screen so navigating between
+    // Home and tools never carries the previous screen's scroll offset over.
+    val contentScrollState = remember(selectedTool) { ScrollState(0) }
+
     MaterialTheme(
         colorScheme = if (darkTheme) darkColorScheme(
             primary = androidx.compose.ui.graphics.Color(0xFFFFFFFF),
@@ -697,7 +702,7 @@ fun DayCalculatorApp(
                 Modifier
                     .padding(padding)
                     .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
+                    .verticalScroll(contentScrollState)
                     .padding(horizontal = 16.dp, vertical = 12.dp)
             ) {
                 if (selectedTool == null) {
@@ -823,15 +828,25 @@ private fun HomeScreen(onSelect: (MainTab) -> Unit) {
         HorizontalDivider(Modifier.weight(1f))
     }
     Spacer(Modifier.height(8.dp))
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        CompactToolCard("Calendar", "Browse dates", R.drawable.ic_calendar, Modifier.weight(1f)) { onSelect(MainTab.CALENDAR) }
-        CompactToolCard("History", "Your calculations", R.drawable.ic_history, Modifier.weight(1f)) { onSelect(MainTab.HISTORY) }
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val useTwoColumns = maxWidth >= 340.dp
+        if (useTwoColumns) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                CompactToolCard("Calendar", "Browse dates", R.drawable.ic_calendar, Modifier.weight(1f)) { onSelect(MainTab.CALENDAR) }
+                CompactToolCard("History", "Your calculations", R.drawable.ic_history, Modifier.weight(1f)) { onSelect(MainTab.HISTORY) }
+            }
+        } else {
+            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                CompactToolCard("Calendar", "Browse dates", R.drawable.ic_calendar, Modifier.fillMaxWidth()) { onSelect(MainTab.CALENDAR) }
+                CompactToolCard("History", "Your calculations", R.drawable.ic_history, Modifier.fillMaxWidth()) { onSelect(MainTab.HISTORY) }
+            }
+        }
     }
 }
 
 @Composable
 private fun ToolCard(title: String, subtitle: String, number: String, onClick: () -> Unit) {
-    Card(Modifier.fillMaxWidth().padding(vertical = 5.dp).clickable(onClick = onClick), shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+    Card(Modifier.fillMaxWidth().padding(vertical = 5.dp).clip(RoundedCornerShape(18.dp)).clickable(onClick = onClick), shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 15.dp), verticalAlignment = Alignment.CenterVertically) {
             Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surface, tonalElevation = 1.dp) {
                 Text(number, modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
@@ -849,7 +864,7 @@ private fun ToolCard(title: String, subtitle: String, number: String, onClick: (
 
 @Composable
 private fun CompactToolCard(title: String, subtitle: String, iconRes: Int, modifier: Modifier, onClick: () -> Unit) {
-    Card(modifier.clickable(onClick = onClick), shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+    Card(modifier.clip(RoundedCornerShape(16.dp)).clickable(onClick = onClick), shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             Surface(shape = RoundedCornerShape(11.dp), color = MaterialTheme.colorScheme.surface) {
                 Icon(painterResource(iconRes), contentDescription = title, tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(8.dp).size(28.dp))
@@ -857,7 +872,7 @@ private fun CompactToolCard(title: String, subtitle: String, iconRes: Int, modif
             Spacer(Modifier.width(9.dp))
             Column(Modifier.weight(1f)) {
                 Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-                Text(subtitle, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                Text(subtitle, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Text("›", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
@@ -912,7 +927,7 @@ private fun DateSelector(
 
 @Composable
 private fun DateChoiceBox(label: String, value: String, modifier: Modifier, onClick: () -> Unit) {
-    OutlinedCard(modifier.clickable(onClick = onClick)) {
+    OutlinedCard(modifier.clip(RoundedCornerShape(12.dp)).clickable(onClick = onClick)) {
         Column(Modifier.padding(horizontal = 12.dp, vertical = 9.dp)) {
             Text(label, style = MaterialTheme.typography.labelMedium)
             Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
@@ -2254,7 +2269,7 @@ private fun HistoryScreen(onReopen: (HistoryEntry) -> Unit) {
             if (sectionEntries.isEmpty()) return
             Text(title, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp, bottom = 2.dp))
             sectionEntries.forEach { entry ->
-                Card(Modifier.fillMaxWidth().padding(vertical = 4.dp).clickable { selected = entry }, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant), shape = RoundedCornerShape(16.dp)) {
+                Card(Modifier.fillMaxWidth().padding(vertical = 4.dp).clip(RoundedCornerShape(16.dp)).clickable { selected = entry }, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant), shape = RoundedCornerShape(16.dp)) {
                     Column(Modifier.fillMaxWidth().padding(14.dp)) {
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
@@ -2350,12 +2365,12 @@ private fun AboutDialog(darkTheme: Boolean, onDismiss: () -> Unit, onOpenChangel
     val currentYear = LocalDate.now().year
     val versionName = BuildConfig.VERSION_NAME
     val versionCode = BuildConfig.VERSION_CODE
-    val releasesUrl = "https://github.com/Veevek1/Day-Calculator/releases"
+    val releasesUrl = "https://github.com/Veevek1/DayCalcy"
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
             Column(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().widthIn(max = 420.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Image(
@@ -2371,12 +2386,13 @@ private fun AboutDialog(darkTheme: Boolean, onDismiss: () -> Unit, onOpenChangel
         },
         text = {
             Column(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().widthIn(max = 420.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
                         .clickable {
                             try {
                                 context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(releasesUrl)))
@@ -2384,9 +2400,9 @@ private fun AboutDialog(darkTheme: Boolean, onDismiss: () -> Unit, onOpenChangel
                         },
                     shape = RoundedCornerShape(14.dp),
                     colors = CardDefaults.cardColors(
-                        containerColor = if (darkTheme) MaterialTheme.colorScheme.surfaceContainerHighest else MaterialTheme.colorScheme.surfaceVariant
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
                     ),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
                 ) {
                     Row(
                         modifier = Modifier
@@ -2406,7 +2422,7 @@ private fun AboutDialog(darkTheme: Boolean, onDismiss: () -> Unit, onOpenChangel
                             )
                         }
                         Spacer(Modifier.width(12.dp))
-                        Text("GitHub", fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
+                        Text("Star on GitHub", fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
                         Text("›", style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
@@ -2426,7 +2442,6 @@ private fun AboutDialog(darkTheme: Boolean, onDismiss: () -> Unit, onOpenChangel
                         "Privacy Policy",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.primary,
-                        textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline,
                         modifier = Modifier
                             .clickable {
                                 try {
@@ -2474,6 +2489,18 @@ private fun AboutDialog(darkTheme: Boolean, onDismiss: () -> Unit, onOpenChangel
 @Composable
 private fun ChangelogScreen() {
     val entries = listOf(
+        "3.43.3" to listOf(
+            "UI" to listOf(
+                "Improved the layout for small, normal, large, and extra-large display and font sizes.",
+                "Fixed pressed card effects so they stay inside rounded corners.",
+                "Updated the About dialog layout for different screen sizes.",
+                "Made the GitHub card consistent between Light and Dark mode and renamed it to Star on GitHub.",
+                "Kept Privacy Policy clickable without the underline."
+            ),
+            "Build" to listOf(
+                "Improved release build reproducibility for distribution builds."
+            )
+        ),
         "3.43.2" to listOf(
             "Fixes" to listOf(
                 "Calculator inputs and the open screen are now kept when you rotate the phone or switch apps.",
@@ -2493,6 +2520,9 @@ private fun ChangelogScreen() {
                 "Added PayPal and Google Pay / UPI support using DayCalcy's theme-adaptive UI.",
                 "Updated the Play Store GitHub description to \"For more information, check GitHub.\"",
                 "Kept the direct-distribution GitHub description as \"For updates, check GitHub.\""
+            ),
+            "Build" to listOf(
+                "Enabled R8 code shrinking and optimization for release builds."
             ),
             "Distribution" to listOf(
                 "Added separate Play Store and direct-distribution build flavors.",
