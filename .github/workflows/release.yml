@@ -27,6 +27,13 @@ jobs:
           chmod +x ./gradlew
           ./gradlew :app:assembleDirectRelease
 
+      - name: Save the unsigned APK for comparison with F-Droid
+        uses: actions/upload-artifact@v4
+        with:
+          name: unsigned-apk
+          path: app/build/outputs/apk/direct/release/*.apk
+          retention-days: 30
+
       - name: Sign the APK with your key
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
@@ -43,6 +50,7 @@ jobs:
             --ks-key-alias "$KEY_ALIAS" \
             --ks-pass env:KEYSTORE_PASSWORD \
             --key-pass env:KEY_PASSWORD \
+            --alignment-preserved true \
             --v1-signing-enabled false \
             --v2-signing-enabled true \
             --v3-signing-enabled false \
