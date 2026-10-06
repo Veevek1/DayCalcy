@@ -1,0 +1,5 @@
+- Improved layout for small to extra-large display and font sizes
+- Fixed pressed card effects to stay inside rounded corners
+- Updated About dialog layout for different screen sizes
+- GitHub card now matches in Light and Dark mode, renamed Star on GitHub
+- Privacy Policy stays clickable without the underline
