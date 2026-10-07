@@ -3,15 +3,9 @@
 </p>
 
 <p align="center">
-  A simple date calculator and reminder app for Android. It works fully offline and doesn't collect any data.
-</p>
-
-<p align="center">
-  <img src="https://img.shields.io/badge/Platform-Android-green" alt="Android">
-  <img src="https://img.shields.io/badge/Language-Kotlin-purple" alt="Kotlin">
-  <img src="https://img.shields.io/badge/Internet-Not%20Required-blue" alt="Offline">
-  <img src="https://img.shields.io/github/v/release/Veevek1/DayCalcy" alt="Latest Release">
-  <img src="https://img.shields.io/badge/License-GPL%20v3-blue.svg" alt="License: GPL v3">
+  <img src="https://img.shields.io/badge/Kotlin-100%25-7F52FF?style=flat-square&logo=kotlin&logoColor=white" alt="Kotlin 100%">
+  <img src="https://img.shields.io/badge/Latest%20Release-v3.43.3-2196F3?style=flat-square" alt="Latest Release v3.43.3">
+  <img src="https://img.shields.io/badge/License-GPL%20v3-2EAD33?style=flat-square" alt="GPL v3">
 </p>
 
 ---
