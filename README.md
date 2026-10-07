@@ -32,11 +32,3 @@ DayCalcy has no internet access, no accounts and no analytics. Everything you en
 ## License
 
 DayCalcy is open source under GPL v3.0. See the [LICENSE](LICENSE) file for details.
-
-The DayCalcy name and logo belong to this project. You're free to fork it or build your own version, just don't present it as the official app.
-
- [!WARNING]
-> **Brand & Naming Guidelines**
->
-> The source code is freely available under the GPL-3.0. However, **DayCalcy** and
-> the **DayCalcy logo** are the branding of the DayCalcy project.
