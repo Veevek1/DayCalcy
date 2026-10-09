@@ -1,6 +1,5 @@
 name: Release APK
 
-# Runs when you push a tag like v3.43.3
 on:
   push:
     tags:
