@@ -41,7 +41,7 @@ jobs:
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
           echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
-          APKSIGNER="$ANDROID_HOME/build-tools/34.0.0/apksigner"
+          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -name apksigner | sort -V | tail -1)/apksigner"
           INPUT_APK="$(find app/build/outputs/apk/direct/release -name '*.apk' | head -1)"
           echo "Signing: $INPUT_APK"
           "$APKSIGNER" sign \
