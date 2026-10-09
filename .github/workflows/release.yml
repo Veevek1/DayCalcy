@@ -21,6 +21,19 @@ jobs:
           distribution: temurin
           java-version: '21'
 
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+
+      - name: Install Android Build Tools 34.0.0
+        run: |
+          sdkmanager --install "build-tools;34.0.0"
+          APKSIGNER="$ANDROID_HOME/build-tools/34.0.0/apksigner"
+          if [ ! -x "$APKSIGNER" ]; then
+            echo "::error::Android Build Tools 34.0.0 apksigner was not found."
+            exit 1
+          fi
+          "$APKSIGNER" version
+
       - name: Build unsigned release APK (same task as F-Droid)
         run: |
           chmod +x ./gradlew
@@ -41,7 +54,11 @@ jobs:
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
           echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
-          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -name apksigner | sort -V | tail -1)/apksigner"
+          APKSIGNER="$ANDROID_HOME/build-tools/34.0.0/apksigner"
+          if [ ! -x "$APKSIGNER" ]; then
+            echo "::error::Pinned apksigner was not found."
+            exit 1
+          fi
           INPUT_APK="$(find app/build/outputs/apk/direct/release -name '*.apk' | head -1)"
           echo "Signing: $INPUT_APK"
           "$APKSIGNER" sign \
@@ -49,7 +66,6 @@ jobs:
             --ks-key-alias "$KEY_ALIAS" \
             --ks-pass env:KEYSTORE_PASSWORD \
             --key-pass env:KEY_PASSWORD \
-            --alignment-preserved true \
             --v1-signing-enabled false \
             --v2-signing-enabled true \
             --v3-signing-enabled false \
