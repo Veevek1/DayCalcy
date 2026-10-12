@@ -57,18 +57,19 @@ internal object ReminderStore {
     }
 }
 
+/** Returns the annual occurrence date using the app's agreed Feb 29 rule. */
+internal fun yearlyReminderOccurrenceDate(originalDate: LocalDate, year: Int): LocalDate =
+    if (originalDate.monthValue == 2 && originalDate.dayOfMonth == 29 && !java.time.Year.isLeap(year.toLong())) {
+        LocalDate.of(year, 2, 28)
+    } else {
+        originalDate.withYear(year)
+    }
+
 internal fun reminderTarget(reminder: DateReminder, now: LocalDateTime): LocalDateTime {
     if (!reminder.repeatsYearly) return LocalDateTime.of(reminder.date, reminder.time)
-    val year = now.year
-    val candidateDate = runCatching { reminder.date.withYear(year) }.getOrElse {
-        if (reminder.date.monthValue == 2 && reminder.date.dayOfMonth == 29) LocalDate.of(year, 2, 28) else reminder.date.withYear(year)
-    }
-    val candidate = LocalDateTime.of(candidateDate, reminder.time)
+    val candidate = LocalDateTime.of(yearlyReminderOccurrenceDate(reminder.date, now.year), reminder.time)
     return if (candidate.isAfter(now)) candidate else {
-        val nextDate = runCatching { reminder.date.withYear(year + 1) }.getOrElse {
-            if (reminder.date.monthValue == 2 && reminder.date.dayOfMonth == 29) LocalDate.of(year + 1, 2, 28) else reminder.date.withYear(year + 1)
-        }
-        LocalDateTime.of(nextDate, reminder.time)
+        LocalDateTime.of(yearlyReminderOccurrenceDate(reminder.date, now.year + 1), reminder.time)
     }
 }
 
@@ -91,6 +92,9 @@ internal object ReminderScheduler {
     private const val NEXT_KEY = "next_code"
     private const val REQUEST_BASE = 100_000
     private const val REQUEST_LIMIT = 1_000_000_000
+    // Keep temporary snooze alarms in a separate PendingIntent namespace so they
+    // never replace the reminder's normal (including yearly) scheduled occurrence.
+    private const val SNOOZE_REQUEST_OFFSET = 1_000_000_000
     private const val LEGACY_REQUEST_BASE = 42_000
 
     private val requestCodeLock = Any()
@@ -137,7 +141,9 @@ internal object ReminderScheduler {
     fun snooze(context: Context, reminder: DateReminder) {
         val alarm = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         val target = LocalDateTime.now(ZoneId.systemDefault()).plusMinutes(REMINDER_SNOOZE_MINUTES)
-        val code = requestCode(context, reminder.id)
+        // A snooze is a separate, temporary alarm. It must not overwrite the main
+        // alarm, which is already scheduled for the next yearly occurrence.
+        val code = requestCode(context, reminder.id) + SNOOZE_REQUEST_OFFSET
         val pending = PendingIntent.getBroadcast(
             context,
             code,
@@ -166,11 +172,16 @@ internal object ReminderScheduler {
     fun cancel(context: Context, reminderId: String) {
         val alarm = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         val code = existingRequestCode(context, reminderId)
-        cancelWithCode(context, alarm, reminderId, code ?: legacyRequestCode(reminderId))
-        // A reminder may already have fired. Remove that posted notification too.
-        // Do this before releasing the persistent request-code mapping.
+        val mainCode = code ?: legacyRequestCode(reminderId)
+        cancelWithCode(context, alarm, reminderId, mainCode)
+        // Deleting a reminder also cancels any separate temporary snooze alarm.
+        cancelWithCode(context, alarm, reminderId, mainCode + SNOOZE_REQUEST_OFFSET)
+        // A reminder may already have fired. Remove notifications for both the
+        // current collision-safe ID and the older hash-based ID used by prior builds.
+        val notifications = NotificationManagerCompat.from(context)
+        notifications.cancel(code ?: legacyRequestCode(reminderId))
+        notifications.cancel(legacyRequestCode(reminderId))
         if (code != null) {
-            NotificationManagerCompat.from(context).cancel(code)
             context.getSharedPreferences(REQUEST_PREFS, Context.MODE_PRIVATE)
                 .edit().remove(ID_PREFIX + reminderId).apply()
         }
@@ -382,7 +393,13 @@ internal class DateReminderReceiver : BroadcastReceiver() {
             REMINDER_ACTION_MARK_DONE -> {
                 val reminderId = intent.getStringExtra("id") ?: return
                 val reminders = ReminderStore.load(context)
-                if (reminders.any { it.id == reminderId }) {
+                val reminder = reminders.firstOrNull { it.id == reminderId } ?: return
+                // Done dismisses this occurrence for yearly reminders but keeps the
+                // saved reminder and schedules its next annual occurrence.
+                NotificationManagerCompat.from(context).cancel(ReminderScheduler.notificationId(context, reminderId))
+                if (reminder.repeatsYearly) {
+                    ReminderScheduler.schedule(context, reminder)
+                } else {
                     ReminderScheduler.cancel(context, reminderId)
                     ReminderStore.save(context, reminders.filterNot { it.id == reminderId })
                     DateReminderWidget.updateAll(context)

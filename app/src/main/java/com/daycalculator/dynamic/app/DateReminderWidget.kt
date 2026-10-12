@@ -360,9 +360,11 @@ open class DateReminderWidget : AppWidgetProvider() {
             val targetDateTime = reminderTarget(reminder, nowDateTime)
             val targetMillis = targetDateTime.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
             val startMillis = if (reminder.repeatsYearly) {
-                val previousTarget = targetDateTime.minusYears(1)
-                val previousMillis = previousTarget.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
-                previousMillis
+                val previousOccurrence = LocalDateTime.of(
+                    yearlyReminderOccurrenceDate(reminder.date, targetDateTime.year - 1),
+                    reminder.time
+                )
+                previousOccurrence.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
             } else {
                 assignmentStartMillis(context, appWidgetId)
             }

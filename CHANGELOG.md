@@ -1,5 +1,26 @@
 # Changelog
 
+## 3.43.4
+
+### Reminders
+- Fixed yearly reminders and their Done behavior.
+- Made reminder types easier to identify.
+- Recheck reminder date and time when saving to avoid reminders with no scheduled notification.
+
+### UI Improvements
+- Improved the Tools layout on narrow screens and larger font sizes.
+- Added a little space before the Tools section and moved the offline message above it.
+- Kept the overflow menu compact and on-screen.
+- Made the Buy me a coffee card match the GitHub card styling in Light mode.
+- Used neutral theme colors for outlined fields, dividers, and selected History filters.
+- Improved About section alignment and made version information copyable.
+
+### Calculators
+- Calculator inputs and results are now remembered locally between visits.
+- Opening a History calculation no longer overwrites the calculator's separately saved inputs.
+- Fixed History duplicate prevention after clearing History.
+
+
 ## 3.43.3
 
 ### UI
@@ -9,7 +30,6 @@
 - Made the GitHub card consistent between Light and Dark mode and renamed it to Star on GitHub.
 - Kept Privacy Policy clickable without the underline.
 
-### Build
 ## 3.43.2
 
 ### Fixes
@@ -93,7 +113,7 @@
 
 ### Reminders
 - Added Done and Snooze 10 min actions to reminder notifications.
-- Snoozing keeps the saved reminder date unchanged.
+- Snoozing keeps the saved reminder date unchanged and does not replace the next yearly occurrence.
 
 ### Results
 - Added one Copy and Share action for each complete calculation result.

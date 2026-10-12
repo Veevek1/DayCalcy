@@ -40,6 +40,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.painterResource
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
@@ -209,6 +210,9 @@ private const val PREFS_NAME = "day_calculator_settings"
 private const val THEME_KEY = "theme_mode"
 private const val HOLIDAYS_KEY = "custom_holidays"
 
+/** Historical calculations are previews; they must not overwrite the user's separately saved calculator inputs. */
+private val LocalCalculatorStatePersistenceEnabled = compositionLocalOf { true }
+
 enum class ThemeMode { SYSTEM, LIGHT, DARK }
 
 enum class MainTab(val label: String) {
@@ -261,8 +265,36 @@ private object HistoryStore {
         save(context, (listOf(entry) + load(context)).distinctBy { it.id }.take(MAX_HISTORY_ENTRIES))
     }
 
-    fun delete(context: Context, id: Long) = save(context, load(context).filterNot { it.id == id })
-    fun clear(context: Context) = save(context, emptyList())
+    fun addCalculationUnlessAlreadyLatest(context: Context, entry: HistoryEntry) {
+        // Calculator state survives leaving/reopening a tool and app restarts. Remember
+        // the last logged payload per calculator so restoring a completed result does
+        // not create a duplicate history entry. A different result replaces this marker.
+        val prefs = context.getSharedPreferences("daycalcy_history_log_guard", Context.MODE_PRIVATE)
+        val key = entry.type.name
+        if (prefs.getString(key, null) == entry.payload) return
+        add(context, entry)
+        prefs.edit().putString(key, entry.payload).apply()
+    }
+
+    fun delete(context: Context, id: Long) {
+        val entries = load(context)
+        val removed = entries.firstOrNull { it.id == id }
+        save(context, entries.filterNot { it.id == id })
+        if (removed != null) {
+            val guards = context.getSharedPreferences("daycalcy_history_log_guard", Context.MODE_PRIVATE)
+            if (guards.getString(removed.type.name, null) == removed.payload) {
+                guards.edit().remove(removed.type.name).apply()
+            }
+        }
+    }
+
+    fun clear(context: Context) {
+        save(context, emptyList())
+        // Clearing History must also clear the duplicate-prevention markers;
+        // otherwise recalculating the same result would incorrectly be skipped.
+        context.getSharedPreferences("daycalcy_history_log_guard", Context.MODE_PRIVATE)
+            .edit().clear().apply()
+    }
 
     private fun save(context: Context, entries: List<HistoryEntry>) {
         val array = JSONArray()
@@ -342,6 +374,44 @@ data class DateInputState(
     }
 }
 
+/** Persists calculator fields locally so leaving a tool or restarting the app restores its last state. */
+@Composable
+private fun <T> rememberPersistentState(
+    key: String,
+    initialValue: T,
+    encode: (T) -> String,
+    decode: (String) -> T
+): MutableState<T> {
+    val context = androidx.compose.ui.platform.LocalContext.current.applicationContext
+    val preferences = remember { context.getSharedPreferences("daycalcy_calculator_state", Context.MODE_PRIVATE) }
+    val state = remember(key) {
+        val saved = preferences.getString(key, null)
+        mutableStateOf(if (saved == null) initialValue else runCatching { decode(saved) }.getOrDefault(initialValue))
+    }
+    val persistenceEnabled = LocalCalculatorStatePersistenceEnabled.current
+    SideEffect {
+        if (persistenceEnabled) preferences.edit().putString(key, encode(state.value)).apply()
+    }
+    return state
+}
+
+private fun encodeDateInput(value: DateInputState): String = JSONObject()
+    .put("day", value.day ?: JSONObject.NULL)
+    .put("month", value.month ?: JSONObject.NULL)
+    .put("year", value.year ?: JSONObject.NULL).toString()
+
+private fun decodeDateInput(value: String): DateInputState {
+    val json = JSONObject(value)
+    return DateInputState(
+        json.optInt("day").takeIf { !json.isNull("day") },
+        json.optInt("month").takeIf { !json.isNull("month") },
+        json.optInt("year").takeIf { !json.isNull("year") }
+    )
+}
+
+private fun encodeTime(value: LocalTime): String = value.toString()
+private fun decodeTime(value: String): LocalTime = LocalTime.parse(value)
+
 private val monthNames = listOf(
     "January", "February", "March", "April", "May", "June",
     "July", "August", "September", "October", "November", "December"
@@ -414,7 +484,10 @@ private fun WidgetReminderChooser(
             onBackground = Color(0xFFF5F5F5),
             onSurface = Color(0xFFF5F5F5),
             onSurfaceVariant = Color(0xFFBDBDBD),
-            outline = Color(0xFF444444)
+            outline = Color(0xFF444444),
+            outlineVariant = Color(0xFF444444),
+            secondaryContainer = Color(0xFF2A2A2A),
+            onSecondaryContainer = Color(0xFFF5F5F5)
         ) else lightColorScheme(
             primary = Color(0xFF111111),
             onPrimary = Color.White,
@@ -429,7 +502,10 @@ private fun WidgetReminderChooser(
             onBackground = Color(0xFF1C1B1F),
             onSurface = Color(0xFF1C1B1F),
             onSurfaceVariant = Color(0xFF49454F),
-            outline = Color(0xFF777777)
+            outline = Color(0xFF777777),
+            outlineVariant = Color(0xFFD0D0D0),
+            secondaryContainer = Color(0xFFE5E5E5),
+            onSecondaryContainer = Color(0xFF1C1B1F)
         )
     ) {
         Scaffold(
@@ -618,7 +694,10 @@ fun DayCalculatorApp(
             onBackground = androidx.compose.ui.graphics.Color(0xFFF5F5F5),
             onSurface = androidx.compose.ui.graphics.Color(0xFFF5F5F5),
             onSurfaceVariant = androidx.compose.ui.graphics.Color(0xFFBDBDBD),
-            outline = androidx.compose.ui.graphics.Color(0xFF444444)
+            outline = androidx.compose.ui.graphics.Color(0xFF444444),
+            outlineVariant = androidx.compose.ui.graphics.Color(0xFF444444),
+            secondaryContainer = androidx.compose.ui.graphics.Color(0xFF2A2A2A),
+            onSecondaryContainer = androidx.compose.ui.graphics.Color(0xFFF5F5F5)
         ) else lightColorScheme(
             primary = androidx.compose.ui.graphics.Color(0xFF111111),
             onPrimary = androidx.compose.ui.graphics.Color.White,
@@ -633,7 +712,10 @@ fun DayCalculatorApp(
             onBackground = androidx.compose.ui.graphics.Color(0xFF1C1B1F),
             onSurface = androidx.compose.ui.graphics.Color(0xFF1C1B1F),
             onSurfaceVariant = androidx.compose.ui.graphics.Color(0xFF49454F),
-            outline = androidx.compose.ui.graphics.Color(0xFF777777)
+            outline = androidx.compose.ui.graphics.Color(0xFF777777),
+            outlineVariant = androidx.compose.ui.graphics.Color(0xFFD0D0D0),
+            secondaryContainer = androidx.compose.ui.graphics.Color(0xFFE5E5E5),
+            onSecondaryContainer = androidx.compose.ui.graphics.Color(0xFF1C1B1F)
         )
     ) {
         Scaffold(
@@ -651,7 +733,10 @@ fun DayCalculatorApp(
                         ),
                     navigationIcon = {
                         if (selectedTool != null) {
-                            IconButton(onClick = { navigateBack() }) {
+                            IconButton(
+                                onClick = { navigateBack() },
+                                modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+                            ) {
                                 Text("←", style = MaterialTheme.typography.headlineMedium)
                             }
                         }
@@ -664,12 +749,33 @@ fun DayCalculatorApp(
                     },
                     actions = {
                         Box {
-                            IconButton(onClick = { menuExpanded = true }) {
-                                Text("⋮", style = MaterialTheme.typography.headlineMedium)
+                            IconButton(
+                                onClick = { menuExpanded = true },
+                                modifier = Modifier.size(48.dp)
+                            ) {
+                                val dotsColor = MaterialTheme.colorScheme.onSurface
+                                androidx.compose.foundation.Canvas(modifier = Modifier.size(24.dp)) {
+                                    val dotRadius = 1.8.dp.toPx()
+                                    val centerX = size.width / 2f
+                                    val spacing = size.height / 4f
+                                    for (index in 1..3) {
+                                        drawCircle(
+                                            color = dotsColor,
+                                            radius = dotRadius,
+                                            center = androidx.compose.ui.geometry.Offset(
+                                                centerX,
+                                                spacing * index
+                                            )
+                                        )
+                                    }
+                                }
                             }
                             DropdownMenu(
                                 expanded = menuExpanded,
-                                onDismissRequest = { menuExpanded = false }
+                                onDismissRequest = { menuExpanded = false },
+                                modifier = Modifier
+                                    .width(144.dp)
+                                    .heightIn(max = (LocalConfiguration.current.screenHeightDp * 0.65f).dp)
                             ) {
                                 ThemeMode.entries.forEach { mode ->
                                     DropdownMenuItem(
@@ -680,16 +786,16 @@ fun DayCalculatorApp(
                                             saveThemeMode(context, mode)
                                             menuExpanded = false
                                         },
-                                        modifier = Modifier.height(44.dp),
-                                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp)
+                                        modifier = Modifier.height(40.dp),
+                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp)
                                     )
                                 }
                                 HorizontalDivider()
                                 DropdownMenuItem(
                                     text = { Text("About") },
                                     onClick = { menuExpanded = false; showAbout = true },
-                                    modifier = Modifier.height(44.dp),
-                                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp)
+                                    modifier = Modifier.height(40.dp),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp)
                                 )
                             }
                         }
@@ -708,6 +814,10 @@ fun DayCalculatorApp(
                 if (selectedTool == null) {
                     HomeScreen(onSelect = { historyEntry = null; returnTool = null; selectedTool = it })
                 } else {
+                    CompositionLocalProvider(LocalCalculatorStatePersistenceEnabled provides (historyEntry == null)) {
+                    // Historical entries are temporary previews. Give each preview its own
+                    // composition state so returning to a calculator restores its saved inputs.
+                    key(selectedTool, historyEntry?.id) {
                     when (selectedTool) {
                         MainTab.AGE -> AgeScreen(historyEntry)
                         MainTab.DIFFERENCE -> DateDifferenceScreen(holidays, { showHolidaySettings = true }, historyEntry)
@@ -766,6 +876,8 @@ fun DayCalculatorApp(
                         MainTab.CHANGELOG -> ChangelogScreen()
                         null -> Unit
                     }
+                    }
+                    }
                 }
                 // Keep the navigation bar transparent while reserving only the
                 // safe bottom gesture/button area inside the scrollable content.
@@ -812,16 +924,13 @@ private fun HomeScreen(onSelect: (MainTab) -> Unit) {
     ToolCard("Duration Calculator", "Find time between dates", "06", onClick = { onSelect(MainTab.DURATION) })
     ToolCard("Date Reminder", "Remember important dates", "07", onClick = { onSelect(MainTab.REMINDER) })
 
-    // Keep the privacy/offline message with the main Home content, as before.
+    Spacer(Modifier.height(34.dp))
     Text(
         "Works offline • Simple and private",
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp)
+        modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
     )
-
-    // Fixed spacing keeps the Home screen clean and reveals Tools after scrolling.
-    Spacer(Modifier.height(85.dp))
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
         HorizontalDivider(Modifier.weight(1f))
         Text("Tools", modifier = Modifier.padding(horizontal = 14.dp), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
@@ -829,7 +938,7 @@ private fun HomeScreen(onSelect: (MainTab) -> Unit) {
     }
     Spacer(Modifier.height(8.dp))
     BoxWithConstraints(Modifier.fillMaxWidth()) {
-        val useTwoColumns = maxWidth >= 340.dp
+        val useTwoColumns = maxWidth >= 400.dp && LocalConfiguration.current.fontScale <= 1.15f
         if (useTwoColumns) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 CompactToolCard("Calendar", "Browse dates", R.drawable.ic_calendar, Modifier.weight(1f)) { onSelect(MainTab.CALENDAR) }
@@ -991,10 +1100,10 @@ private fun daysInMonth(year: Int, month: Int): Int = try { LocalDate.of(year, m
 fun AgeScreen(historyEntry: HistoryEntry? = null) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val today = LocalDate.now()
-    var dob by rememberSaveable(stateSaver = DateInputStateSaver) { mutableStateOf(DateInputState()) }
-    var ageAt by rememberSaveable(stateSaver = DateInputStateSaver) { mutableStateOf(DateInputState.from(today)) }
-    var hasAgeAt by rememberSaveable { mutableStateOf(true) }
-    var calculated by rememberSaveable { mutableStateOf(false) }
+    var dob by rememberPersistentState("age.dob", DateInputState(), ::encodeDateInput, ::decodeDateInput)
+    var ageAt by rememberPersistentState("age.ageAt", DateInputState.from(today), ::encodeDateInput, ::decodeDateInput)
+    var hasAgeAt by rememberPersistentState("age.hasAgeAt", true, { it.toString() }, { it.toBooleanStrictOrNull() ?: true })
+    var calculated by rememberPersistentState("age.calculated", false, { it.toString() }, { it.toBooleanStrictOrNull() ?: false })
 
     Text("Age Calculator", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
     Text("Calculate exact age in years, months, weeks, days, hours, minutes and seconds.", style = MaterialTheme.typography.bodyMedium)
@@ -1026,7 +1135,7 @@ fun AgeScreen(historyEntry: HistoryEntry? = null) {
             val details = "${formatDate(birth)} → ${formatDate(at)}\n$summary"
             val payload = JSONObject().put("dob", birth.toString()).put("ageAt", at.toString()).put("hasAgeAt", hasAgeAt).toString()
             val id = HistoryStore.nextId(context)
-            HistoryStore.add(context, HistoryEntry(id, HistoryType.AGE, id, summary, details, payload))
+            HistoryStore.addCalculationUnlessAlreadyLatest(context, HistoryEntry(id, HistoryType.AGE, id, summary, details, payload))
         }
     }
     Spacer(Modifier.height(8.dp))
@@ -1075,15 +1184,15 @@ fun AgeScreen(historyEntry: HistoryEntry? = null) {
 @Composable
 private fun DurationCalculatorScreen(darkTheme: Boolean, historyEntry: HistoryEntry? = null) {
     val context = androidx.compose.ui.platform.LocalContext.current
-    var startDate by rememberSaveable(stateSaver = DateInputStateSaver) { mutableStateOf(DateInputState.from(LocalDate.now())) }
-    var endDate by rememberSaveable(stateSaver = DateInputStateSaver) { mutableStateOf(DateInputState.from(LocalDate.now())) }
+    var startDate by rememberPersistentState("duration.startDate", DateInputState.from(LocalDate.now()), ::encodeDateInput, ::decodeDateInput)
+    var endDate by rememberPersistentState("duration.endDate", DateInputState.from(LocalDate.now()), ::encodeDateInput, ::decodeDateInput)
     val initialTime = remember { LocalTime.now().withSecond(0).withNano(0) }
-    var startTime by rememberSaveable(stateSaver = LocalTimeSaver) { mutableStateOf(initialTime) }
-    var endTime by rememberSaveable(stateSaver = LocalTimeSaver) { mutableStateOf(initialTime) }
-    var breakEnabled by rememberSaveable { mutableStateOf(false) }
-    var breakHours by rememberSaveable { mutableStateOf("0") }
-    var breakMinutes by rememberSaveable { mutableStateOf("0") }
-    var calculated by rememberSaveable { mutableStateOf(false) }
+    var startTime by rememberPersistentState("duration.startTime", initialTime, ::encodeTime, ::decodeTime)
+    var endTime by rememberPersistentState("duration.endTime", initialTime, ::encodeTime, ::decodeTime)
+    var breakEnabled by rememberPersistentState("duration.breakEnabled", false, { it.toString() }, { it.toBooleanStrictOrNull() ?: false })
+    var breakHours by rememberPersistentState("duration.breakHours", "0", { it }, { it })
+    var breakMinutes by rememberPersistentState("duration.breakMinutes", "0", { it }, { it })
+    var calculated by rememberPersistentState("duration.calculated", false, { it.toString() }, { it.toBooleanStrictOrNull() ?: false })
     var showStartTimePicker by rememberSaveable { mutableStateOf(false) }
     var showEndTimePicker by rememberSaveable { mutableStateOf(false) }
     var error by rememberSaveable { mutableStateOf<String?>(null) }
@@ -1224,7 +1333,7 @@ private fun DurationCalculatorScreen(darkTheme: Boolean, historyEntry: HistoryEn
                     .put("breakHours", breakH ?: 0)
                     .put("breakMinutes", breakM ?: 0)
                     .toString()
-                HistoryStore.add(context, HistoryEntry(id, HistoryType.DURATION, id, summary, details, payload))
+                HistoryStore.addCalculationUnlessAlreadyLatest(context, HistoryEntry(id, HistoryType.DURATION, id, summary, details, payload))
             }
         }
 
@@ -1283,11 +1392,11 @@ private fun DurationCalculatorScreen(darkTheme: Boolean, historyEntry: HistoryEn
 @Composable
 fun DateDifferenceScreen(holidays: List<Holiday>, openSettings: () -> Unit, historyEntry: HistoryEntry? = null) {
     // Calculator.net-style workflow: edit inputs first, then explicitly press Calculate.
-    var start by rememberSaveable(stateSaver = DateInputStateSaver) { mutableStateOf(DateInputState.from(LocalDate.now())) }
-    var end by rememberSaveable(stateSaver = DateInputStateSaver) { mutableStateOf(DateInputState.from(LocalDate.now())) }
-    var includeEnd by rememberSaveable { mutableStateOf(false) }
-    var businessOnly by rememberSaveable { mutableStateOf(false) }
-    var calculated by rememberSaveable { mutableStateOf(false) }
+    var start by rememberPersistentState("difference.start", DateInputState.from(LocalDate.now()), ::encodeDateInput, ::decodeDateInput)
+    var end by rememberPersistentState("difference.end", DateInputState.from(LocalDate.now()), ::encodeDateInput, ::decodeDateInput)
+    var includeEnd by rememberPersistentState("difference.includeEnd", false, { it.toString() }, { it.toBooleanStrictOrNull() ?: false })
+    var businessOnly by rememberPersistentState("difference.businessOnly", false, { it.toString() }, { it.toBooleanStrictOrNull() ?: false })
+    var calculated by rememberPersistentState("difference.calculated", false, { it.toString() }, { it.toBooleanStrictOrNull() ?: false })
 
     fun invalidateResult() {
         calculated = false
@@ -1363,11 +1472,15 @@ fun DateDifferenceScreen(holidays: List<Holiday>, openSettings: () -> Unit, hist
     LaunchedEffect(calculated) {
         if (calculated && historyEntry == null && datesValid) {
             val totalDays = ChronoUnit.DAYS.between(s!!, e!!) + if (includeEnd) 1 else 0
-            val summary = "$totalDays days"
-            val details = "${formatDate(s)} → ${formatDate(e)}\n$summary"
+            val holidayCounts = countHolidayDatesBetween(s, e, includeEnd, holidays)
+            val weekendDays = countWeekendDays(s, e, includeEnd)
+            val businessDays = (totalDays - weekendDays - holidayCounts.weekdayHolidays).coerceAtLeast(0)
+            val summary = if (businessOnly) "$businessDays business days" else "$totalDays calendar days"
+            val details = "${formatDate(s)} → ${formatDate(e)}\n$summary" +
+                if (businessOnly) "\nWeekends and configured weekday holidays excluded." else ""
             val payload = JSONObject().put("start", s.toString()).put("end", e.toString()).put("includeEnd", includeEnd).put("businessOnly", businessOnly).toString()
             val id = HistoryStore.nextId(context)
-            HistoryStore.add(context, HistoryEntry(id, HistoryType.DIFFERENCE, id, summary, details, payload))
+            HistoryStore.addCalculationUnlessAlreadyLatest(context, HistoryEntry(id, HistoryType.DIFFERENCE, id, summary, details, payload))
         }
     }
 
@@ -1441,11 +1554,11 @@ fun DateDifferenceScreen(holidays: List<Holiday>, openSettings: () -> Unit, hist
 
 @Composable
 fun AddSubtractScreen(holidays: List<Holiday>, openSettings: () -> Unit, historyEntry: HistoryEntry? = null) {
-    var start by rememberSaveable(stateSaver = DateInputStateSaver) { mutableStateOf(DateInputState.from(LocalDate.now())) }
-    var years by rememberSaveable { mutableStateOf("0") }; var months by rememberSaveable { mutableStateOf("0") }
-    var weeks by rememberSaveable { mutableStateOf("0") }; var days by rememberSaveable { mutableStateOf("0") }
-    var add by rememberSaveable { mutableStateOf(true) }; var business by rememberSaveable { mutableStateOf(false) }
-    var calculated by rememberSaveable { mutableStateOf(false) }
+    var start by rememberPersistentState("addSubtract.start", DateInputState.from(LocalDate.now()), ::encodeDateInput, ::decodeDateInput)
+    var years by rememberPersistentState("addSubtract.years", "0", { it }, { it }); var months by rememberPersistentState("addSubtract.months", "0", { it }, { it })
+    var weeks by rememberPersistentState("addSubtract.weeks", "0", { it }, { it }); var days by rememberPersistentState("addSubtract.days", "0", { it }, { it })
+    var add by rememberPersistentState("addSubtract.add", true, { it.toString() }, { it.toBooleanStrictOrNull() ?: true }); var business by rememberPersistentState("addSubtract.business", false, { it.toString() }, { it.toBooleanStrictOrNull() ?: false })
+    var calculated by rememberPersistentState("addSubtract.calculated", false, { it.toString() }, { it.toBooleanStrictOrNull() ?: false })
 
     Text("Add or Subtract from a Date", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
     Text("Move a date forward or backward by years, months, weeks and days.", style = MaterialTheme.typography.bodyMedium)
@@ -1491,7 +1604,7 @@ fun AddSubtractScreen(holidays: List<Holiday>, openSettings: () -> Unit, history
                 val details = "${formatDate(date)} ${if (add) "+" else "−"} ${y}y ${m}m ${w}w ${d}d\nResult: $summary"
                 val payload = JSONObject().put("start", date.toString()).put("years", years).put("months", months).put("weeks", weeks).put("days", days).put("add", add).put("business", business).toString()
                 val id = HistoryStore.nextId(context)
-                HistoryStore.add(context, HistoryEntry(id, HistoryType.ADD_SUBTRACT, id, summary, details, payload))
+                HistoryStore.addCalculationUnlessAlreadyLatest(context, HistoryEntry(id, HistoryType.ADD_SUBTRACT, id, summary, details, payload))
             }
         }
     }
@@ -1535,11 +1648,11 @@ fun AddSubtractScreen(holidays: List<Holiday>, openSettings: () -> Unit, history
 
 @Composable
 fun DayCounterScreen(holidays: List<Holiday>, openSettings: () -> Unit, historyEntry: HistoryEntry? = null) {
-    var start by rememberSaveable(stateSaver = DateInputStateSaver) { mutableStateOf(DateInputState.from(LocalDate.now())) }
-    var amount by rememberSaveable { mutableStateOf("0") }
-    var add by rememberSaveable { mutableStateOf(true) }
-    var business by rememberSaveable { mutableStateOf(false) }
-    var calculated by rememberSaveable { mutableStateOf(false) }
+    var start by rememberPersistentState("counter.start", DateInputState.from(LocalDate.now()), ::encodeDateInput, ::decodeDateInput)
+    var amount by rememberPersistentState("counter.amount", "0", { it }, { it })
+    var add by rememberPersistentState("counter.add", true, { it.toString() }, { it.toBooleanStrictOrNull() ?: true })
+    var business by rememberPersistentState("counter.business", false, { it.toString() }, { it.toBooleanStrictOrNull() ?: false })
+    var calculated by rememberPersistentState("counter.calculated", false, { it.toString() }, { it.toBooleanStrictOrNull() ?: false })
 
     Text("Day Counter", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
     Text("Count a number of calendar or business days from a date.", style = MaterialTheme.typography.bodyMedium)
@@ -1573,7 +1686,7 @@ fun DayCounterScreen(holidays: List<Holiday>, openSettings: () -> Unit, historyE
                 val details = "${formatDate(date)} ${if (add) "+" else "−"} $n days\nResult: $summary"
                 val payload = JSONObject().put("start", date.toString()).put("amount", amount).put("add", add).put("business", business).toString()
                 val id = HistoryStore.nextId(context)
-                HistoryStore.add(context, HistoryEntry(id, HistoryType.COUNTER, id, summary, details, payload))
+                HistoryStore.addCalculationUnlessAlreadyLatest(context, HistoryEntry(id, HistoryType.COUNTER, id, summary, details, payload))
             }
         }
     }
@@ -1598,8 +1711,8 @@ fun DayCounterScreen(holidays: List<Holiday>, openSettings: () -> Unit, historyE
 
 @Composable
 fun DayOfWeekScreen(historyEntry: HistoryEntry? = null) {
-    var date by rememberSaveable(stateSaver = DateInputStateSaver) { mutableStateOf(DateInputState.from(LocalDate.now())) }
-    var calculated by rememberSaveable { mutableStateOf(false) }
+    var date by rememberPersistentState("weekday.date", DateInputState.from(LocalDate.now()), ::encodeDateInput, ::decodeDateInput)
+    var calculated by rememberPersistentState("weekday.calculated", false, { it.toString() }, { it.toBooleanStrictOrNull() ?: false })
     Text("Day of the Week", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
     Text("Find the weekday for any date.", style = MaterialTheme.typography.bodyMedium)
     Spacer(Modifier.height(14.dp))
@@ -1619,7 +1732,7 @@ fun DayOfWeekScreen(historyEntry: HistoryEntry? = null) {
             val summary = dayName(selectedDate)
             val details = "${formatDate(selectedDate)}\n$summary"
             val id = HistoryStore.nextId(context)
-            HistoryStore.add(context, HistoryEntry(id, HistoryType.WEEKDAY, id, summary, details, datePayload(selectedDate).toString()))
+            HistoryStore.addCalculationUnlessAlreadyLatest(context, HistoryEntry(id, HistoryType.WEEKDAY, id, summary, details, datePayload(selectedDate).toString()))
         }
     }
     Button(onClick = { if (validDate) calculated = true }, enabled = validDate, modifier = Modifier.fillMaxWidth()) { Text("Calculate") }
@@ -1809,7 +1922,7 @@ private fun DateReminderScreen(
                         MaterialTheme.colorScheme.surfaceVariant
                     }
                 ),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
                 border = if (isHighlighted) {
                     androidx.compose.foundation.BorderStroke(1.2.dp, animatedBorder.value)
                 } else null
@@ -1818,6 +1931,11 @@ private fun DateReminderScreen(
                     Column(Modifier.weight(1f)) {
                         Text(reminder.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                         Text(formatDate(reminder.date), style = MaterialTheme.typography.bodyMedium)
+                        Text(
+                            if (reminder.repeatsYearly) "Yearly" else "One-time",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                         Text(
                             "🔔 ${formattedTime(reminder.time)}",
                             style = MaterialTheme.typography.bodySmall,
@@ -1900,7 +2018,9 @@ private fun DateReminderScreen(
                 TextButton(
                     onClick = {
                     val selected = date.toDate()
-                    if (title.isNotBlank() && selected != null && (repeatsYearly || !selected.isBefore(today))) {
+                    // Revalidate at click time as well as disabling Save in the UI.
+                    // The selected time can pass while the dialog remains open.
+                    if (title.isNotBlank() && selected != null && reminderValidationMessage() == null) {
                         val oldId = editingId
                         if (oldId != null) ReminderScheduler.cancel(context, oldId)
                         val reminder = DateReminder(oldId ?: newReminderId(), title.trim(), selected, time, repeatsYearly)
@@ -1981,7 +2101,7 @@ private fun CalendarScreen(
     val days = month.lengthOfMonth()
     fun reminderOccursOn(date: LocalDate, reminder: DateReminder): Boolean =
         if (reminder.repeatsYearly) {
-            date.monthValue == reminder.date.monthValue && date.dayOfMonth == reminder.date.dayOfMonth
+            date == yearlyReminderOccurrenceDate(reminder.date, date.year)
         } else {
             date == reminder.date
         }
@@ -2427,56 +2547,55 @@ private fun AboutDialog(darkTheme: Boolean, onDismiss: () -> Unit, onOpenChangel
                     }
                 }
 
-                Spacer(Modifier.height(8.dp))
-                Text(BuildConfig.GITHUB_DESCRIPTION, style = MaterialTheme.typography.bodySmall)
+                if (BuildConfig.GITHUB_DESCRIPTION.isNotBlank()) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(BuildConfig.GITHUB_DESCRIPTION, style = MaterialTheme.typography.bodySmall)
+                }
 
                 DistributionSupportSection()
 
                 Spacer(Modifier.height(10.dp))
-                Text("Version: $versionName ($versionCode)", style = MaterialTheme.typography.bodySmall)
-                Text("© $currentYear Vivek", style = MaterialTheme.typography.bodySmall)
+                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                Text(
+                    "Version: $versionName ($versionCode)",
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.fillMaxWidth().clickable {
+                        clipboard.setPrimaryClip(android.content.ClipData.newPlainText("DayCalcy version", "$versionName ($versionCode)"))
+                    },
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                )
+                Text(
+                    "© $currentYear Vivek",
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                )
 
                 if (BuildConfig.PRIVACY_POLICY_URL.isNotEmpty()) {
-                    Spacer(Modifier.height(6.dp))
+                    Spacer(Modifier.height(8.dp))
                     Text(
                         "Privacy Policy",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier
-                            .clickable {
-                                try {
-                                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(BuildConfig.PRIVACY_POLICY_URL)))
-                                } catch (_: Exception) { }
-                            }
-                            .padding(vertical = 4.dp)
+                        modifier = Modifier.fillMaxWidth().clickable {
+                            try {
+                                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(BuildConfig.PRIVACY_POLICY_URL)))
+                            } catch (_: Exception) { }
+                        }.padding(vertical = 4.dp),
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
                     )
                 }
 
                 if (BuildConfig.SHOW_CHANGELOG) {
-                    Spacer(Modifier.height(14.dp))
-
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable(onClick = onOpenChangelog)
-                            .padding(horizontal = 4.dp, vertical = 4.dp),
-                        horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Image(
-                            painter = painterResource(id = R.drawable.ic_changelog),
-                            contentDescription = "Changelog",
-                            modifier = Modifier.size(16.dp),
-                            colorFilter = ColorFilter.tint(MaterialTheme.colorScheme.onSurfaceVariant)
-                        )
-                        Spacer(Modifier.width(7.dp))
-                        Text(
-                            "Changelog",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            style = MaterialTheme.typography.bodySmall,
-                            fontWeight = FontWeight.Normal
-                        )
-                    }
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "Changelog",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Normal,
+                        modifier = Modifier.fillMaxWidth().clickable(onClick = onOpenChangelog).padding(vertical = 4.dp),
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    )
                 }
             }
         },
@@ -2489,6 +2608,22 @@ private fun AboutDialog(darkTheme: Boolean, onDismiss: () -> Unit, onOpenChangel
 @Composable
 private fun ChangelogScreen() {
     val entries = listOf(
+        "3.43.4" to listOf(
+            "Reminders" to listOf(
+                "Fixed yearly reminder handling and improved reminder type labels.",
+                "Improved reminder scheduling validation and notification cleanup."
+            ),
+            "Calculators" to listOf(
+                "Saved calculator inputs and results locally so they can be restored when reopening a calculator.",
+                "Fixed History clearing so the same calculation can be recorded again."
+            ),
+            "UI Improvements" to listOf(
+                "Improved responsive layouts and About section alignment.",
+                "Kept the overflow menu compact and aligned its touch feedback.",
+                "Improved theme colors for borders and selected filters.",
+                "Matched reminder cards to the app's flat card style and refined home screen spacing."
+            )
+        ),
         "3.43.3" to listOf(
             "UI" to listOf(
                 "Improved the layout for small, normal, large, and extra-large display and font sizes.",
@@ -2583,7 +2718,7 @@ private fun ChangelogScreen() {
             ),
             "Reminders" to listOf(
                 "Added Done and Snooze 10 min actions to reminder notifications.",
-                "Snoozing keeps the saved reminder date unchanged."
+                "Snoozing keeps the saved reminder date unchanged and does not replace the next yearly occurrence."
             ),
             "Results" to listOf(
                 "Added one Copy and Share action for each complete calculation result."

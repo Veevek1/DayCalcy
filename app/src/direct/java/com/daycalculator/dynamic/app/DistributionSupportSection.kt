@@ -19,7 +19,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 
 @Composable
 fun DistributionSupportSection() {
-    val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
     var showSupportDialog by remember { mutableStateOf(false) }
 
     if (showSupportDialog) {
@@ -27,6 +26,7 @@ fun DistributionSupportSection() {
     }
 
     Spacer(Modifier.height(10.dp))
+    // Keep this card visually matched to the Star on GitHub card in About.
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -34,9 +34,9 @@ fun DistributionSupportSection() {
             .clickable { showSupportDialog = true },
         shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(
-            containerColor = if (isDark) MaterialTheme.colorScheme.surfaceContainerHighest else MaterialTheme.colorScheme.surfaceVariant
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Row(
             modifier = Modifier
@@ -147,7 +147,7 @@ private fun SupportMethodCard(
         colors = CardDefaults.cardColors(
             containerColor = if (isDark) MaterialTheme.colorScheme.surfaceContainerHighest else MaterialTheme.colorScheme.surfaceVariant
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = if (isDark) 1.dp else 0.dp)
     ) {
         Row(
             modifier = Modifier
