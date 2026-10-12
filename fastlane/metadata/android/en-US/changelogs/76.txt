@@ -1,0 +1,7 @@
+- Improved reminder logic and notifications.
+- Fixed reminder date and time issues.
+- Improved layout on small screens.
+- Fixed Light mode styling.
+- Improved the About section.
+- Calculator inputs and results are saved locally.
+- Fixed History issues.
