@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="color-scheme" content="light dark">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>DayCalcy – Calculate dates easily</title>
 <meta name="description" content="DayCalcy is a simple, offline Android app for age, date difference, add/subtract, duration and date reminders.">
@@ -9,14 +10,14 @@
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;600;800&display=swap" rel="stylesheet">
 <style>
 :root{
+  color-scheme:light dark;
   --blue:#007BFD; --bg:#F4F8FD; --ink:#0A2540; --muted:#52667F; --line:#D5E0EE; --card:#FFFFFF;
   box-sizing:border-box;
   padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
 }
 @media (prefers-color-scheme:dark){
-  :root:not([data-theme="light"]){--bg:#07121F;--ink:#EAF2FC;--muted:#9DB0C7;--line:#1D3047;--card:#0E1D30}
+  :root{--bg:#07121F;--ink:#EAF2FC;--muted:#9DB0C7;--line:#1D3047;--card:#0E1D30}
 }
-:root[data-theme="dark"]{--bg:#07121F;--ink:#EAF2FC;--muted:#9DB0C7;--line:#1D3047;--card:#0E1D30}
 html{scroll-padding-top:env(safe-area-inset-top,0px);scroll-behavior:smooth}
 *,*::before,*::after{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);font:400 17px/1.55 "Bricolage Grotesque",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
