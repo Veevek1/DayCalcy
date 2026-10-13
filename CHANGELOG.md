@@ -1,5 +1,12 @@
 # Changelog
 
+## 3.43.5
+
+### Stability
+- Fixed the donation method card background in Light Mode.
+- Reduced spacing around the offline privacy message on the home screen.
+- Addressed the missing app title in the F-Droid listing.
+
 ## 3.43.4
 
 ### Reminders

@@ -924,12 +924,12 @@ private fun HomeScreen(onSelect: (MainTab) -> Unit) {
     ToolCard("Duration Calculator", "Find time between dates", "06", onClick = { onSelect(MainTab.DURATION) })
     ToolCard("Date Reminder", "Remember important dates", "07", onClick = { onSelect(MainTab.REMINDER) })
 
-    Spacer(Modifier.height(34.dp))
+    Spacer(Modifier.height(14.dp))
     Text(
         "Works offline • Simple and private",
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
+        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
     )
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
         HorizontalDivider(Modifier.weight(1f))
@@ -2608,6 +2608,13 @@ private fun AboutDialog(darkTheme: Boolean, onDismiss: () -> Unit, onOpenChangel
 @Composable
 private fun ChangelogScreen() {
     val entries = listOf(
+        "3.43.5" to listOf(
+            "Stability" to listOf(
+                "Fixed the donation method card background in Light Mode.",
+                "Adjusted home screen spacing around the offline privacy message.",
+                "Addressed the missing app title in the F-Droid listing."
+            )
+        ),
         "3.43.4" to listOf(
             "Reminders" to listOf(
                 "Fixed yearly reminder handling and improved reminder type labels.",
