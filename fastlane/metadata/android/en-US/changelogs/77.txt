@@ -1,0 +1,3 @@
+-Fixed the donation method card background in Light Mode.
+-Reduced spacing around the offline privacy message on the home screen.
+-Addressed the missing app title in the F-Droid listing.
