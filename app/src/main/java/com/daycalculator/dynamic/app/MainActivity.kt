@@ -775,7 +775,14 @@ fun DayCalculatorApp(
                                 onDismissRequest = { menuExpanded = false },
                                 modifier = Modifier
                                     .width(144.dp)
-                                    .heightIn(max = (LocalConfiguration.current.screenHeightDp * 0.65f).dp)
+                                    .heightIn(max = (LocalConfiguration.current.screenHeightDp * 0.65f).dp),
+                                shape = RoundedCornerShape(18.dp),
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                tonalElevation = 0.dp,
+                                shadowElevation = 4.dp,
+                                border = androidx.compose.foundation.BorderStroke(
+                                    0.75.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)
+                                )
                             ) {
                                 ThemeMode.entries.forEach { mode ->
                                     DropdownMenuItem(
@@ -2608,6 +2615,14 @@ private fun AboutDialog(darkTheme: Boolean, onDismiss: () -> Unit, onOpenChangel
 @Composable
 private fun ChangelogScreen() {
     val entries = listOf(
+        "3.43.6" to listOf(
+            "UI Improvements" to listOf(
+                "Matched the home-screen overflow menu background to the main cards and added rounded corners.",
+                "Matched Holiday dropdown surfaces to the app cards and refined borders for Light and Dark themes.",
+                "Balanced month and day dropdown widths and gave both the same moderate, scrollable maximum height.",
+                "Rounded the Holiday list container without changing its existing colours."
+            )
+        ),
         "3.43.5" to listOf(
             "Stability" to listOf(
                 "Fixed the donation method card background in Light Mode.",
@@ -2834,8 +2849,10 @@ private fun HolidaySettingsDialog(holidays: List<Holiday>, onDismiss: () -> Unit
                     if (name.isNotBlank()) { working = (working + Holiday(month, day, name.trim())).distinctBy { "${it.month}-${it.day}-${it.name}" }; name = "" }
                 }, Modifier.fillMaxWidth()) { Text("Add holiday") }
                 Spacer(Modifier.height(8.dp))
-                working.forEachIndexed { index, h ->
-                    ListItem(headlineContent = { Text("${monthNames[h.month - 1].take(3)} ${h.day} — ${h.name}") }, trailingContent = { TextButton(onClick = { working = working.filterIndexed { i, _ -> i != index } }) { Text("Remove") } })
+                Column(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))) {
+                    working.forEachIndexed { index, h ->
+                        ListItem(headlineContent = { Text("${monthNames[h.month - 1].take(3)} ${h.day} — ${h.name}") }, trailingContent = { TextButton(onClick = { working = working.filterIndexed { i, _ -> i != index } }) { Text("Remove") } })
+                    }
                 }
             }
         },
@@ -2855,15 +2872,22 @@ private fun HolidaySettingsDialog(holidays: List<Holiday>, onDismiss: () -> Unit
         }
         DropdownMenu(
             expanded = open,
-            onDismissRequest = { open = false }
+            onDismissRequest = { open = false },
+            shape = RoundedCornerShape(14.dp),
+            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+            tonalElevation = 0.dp,
+            shadowElevation = 4.dp,
+            border = androidx.compose.foundation.BorderStroke(
+                0.75.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)
+            )
         ) {
             // Keep this as one bounded, scrollable column. A LazyColumn nested
             // inside DropdownMenu can be measured with an unbounded height and
             // crash when the menu is opened on some Compose versions.
             Column(
                 modifier = Modifier
-                    .widthIn(min = 150.dp, max = 220.dp)
-                    .heightIn(max = 300.dp)
+                    .width(144.dp)
+                    .heightIn(max = 240.dp)
                     .verticalScroll(rememberScrollState())
             ) {
                 monthNames.forEachIndexed { i, n ->
@@ -2872,7 +2896,9 @@ private fun HolidaySettingsDialog(holidays: List<Holiday>, onDismiss: () -> Unit
                         onClick = {
                             onValue(i + 1)
                             open = false
-                        }
+                        },
+                        modifier = Modifier.height(40.dp),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp)
                     )
                 }
             }
@@ -2886,16 +2912,27 @@ private fun HolidaySettingsDialog(holidays: List<Holiday>, onDismiss: () -> Unit
         OutlinedButton(onClick = { open = true }, Modifier.fillMaxWidth()) { Text(value.toString()) }
         DropdownMenu(
             expanded = open,
-            onDismissRequest = { open = false }
+            onDismissRequest = { open = false },
+            shape = RoundedCornerShape(14.dp),
+            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+            tonalElevation = 0.dp,
+            shadowElevation = 4.dp,
+            border = androidx.compose.foundation.BorderStroke(
+                0.75.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)
+            )
         ) {
-            Column(Modifier.heightIn(max = 240.dp).verticalScroll(rememberScrollState())) {
+            Column(
+                Modifier.width(112.dp).heightIn(max = 240.dp).verticalScroll(rememberScrollState())
+            ) {
                 (1..max).forEach { n ->
                     DropdownMenuItem(
                         text = { Text(n.toString()) },
                         onClick = {
                             onValue(n)
                             open = false
-                        }
+                        },
+                        modifier = Modifier.height(40.dp),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp)
                     )
                 }
             }

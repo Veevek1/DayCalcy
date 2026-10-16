@@ -1,5 +1,14 @@
 # Changelog
 
+## 3.43.6
+
+### UI Improvements
+- Matched the home-screen overflow menu background to the main cards and added rounded corners.
+- Matched Holiday dropdown backgrounds to the app surfaces and refined their borders for Light and Dark themes.
+- Balanced dropdown sizing: a wider month list, a comfortable day-number list, and equal scrollable maximum heights.
+
+- Rounded the Holiday list container without changing its existing colours.
+
 ## 3.43.5
 
 ### Stability
