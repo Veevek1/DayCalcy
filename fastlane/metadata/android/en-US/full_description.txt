@@ -1,9 +1,5 @@
-DayCalcy is a simple, private and completely offline date calculator with reminders.
-
-Calculate the number of days between dates, add or subtract days, calculate age, compare dates and work with time durations.
-
-Save important dates as reminders and get notified when they arrive.
-
-DayCalcy also includes Countdown Widgets for tracking upcoming events and a Year Progress Widget to view the progress of the current year directly from your home screen.
-
-DayCalcy works without an internet connection and does not require online services.
+- DayCalcy is a simple, private and completely offline date calculator with reminders.
+- Calculate the number of days between dates, add or subtract days, calculate age, compare dates and work with time durations.
+- Save important dates as reminders and get notified when they arrive.
+- DayCalcy also includes Countdown Widgets for tracking upcoming events and a Year Progress Widget to view the progress of the current year directly from your home screen.
+- DayCalcy works without an internet connection and does not require online services.
