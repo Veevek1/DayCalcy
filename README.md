@@ -3,9 +3,15 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Kotlin-100%25-7F52FF?style=flat-square&logo=kotlin&logoColor=white" alt="Kotlin 100%">
-    <img src="https://img.shields.io/github/v/release/Veevek1/DayCalcy?label=Latest%20Release&style=flat-square&color=2196F3" alt="Latest Release">
-  <img src="https://img.shields.io/badge/License-GPL%20v3-2EAD33?style=flat-square" alt="GPL v3">
+  <a href="https://kotlinlang.org/">
+    <img src="https://img.shields.io/badge/Kotlin-7F52FF?style=flat-square&logo=kotlin&logoColor=white" alt="Kotlin">
+  </a>
+  <a href="https://github.com/Veevek1/DayCalcy/releases/latest">
+    <img src="https://img.shields.io/github/v/release/Veevek1/DayCalcy?style=flat-square&color=2196F3" alt="Latest Release">
+  </a>
+  <a href="https://github.com/Veevek1/DayCalcy/blob/main/LICENSE">
+    <img src="https://img.shields.io/badge/License-GPL%20v3-2E7D32?style=flat-square" alt="GPL v3 License">
+  </a>
 </p>
 
 ---
