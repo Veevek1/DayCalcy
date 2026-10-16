@@ -29,12 +29,8 @@ DayCalcy has no internet access, no accounts and no analytics. Everything you en
     <a href="https://f-droid.org/packages/com.daycalculator.dynamic.app/"><img src="https://f-droid.org/badge/get-it-on.png" alt="Get it on F-Droid" height="80"></a>
 </p>
 
-## Support
 
-PayPal: https://paypal.me/vivekjadhav05
-
-Bitcoin:
-
+## Bitcoin
 `bc1qew0mekperhg8nc4ql0ce4a7z2xju2080lsrcml`
 
 
