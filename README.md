@@ -37,6 +37,7 @@ DayCalcy has no internet access, no accounts and no analytics. Everything you en
 
 
 ## Bitcoin
+Support development with Bitcoin.
 `bc1qew0mekperhg8nc4ql0ce4a7z2xju2080lsrcml`
 
 
