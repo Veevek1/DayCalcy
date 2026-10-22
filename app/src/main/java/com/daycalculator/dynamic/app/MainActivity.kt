@@ -43,6 +43,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -216,7 +221,7 @@ private val LocalCalculatorStatePersistenceEnabled = compositionLocalOf { true }
 enum class ThemeMode { SYSTEM, LIGHT, DARK }
 
 enum class MainTab(val label: String) {
-    AGE("Age"), DIFFERENCE("Date Difference"), ADD_SUBTRACT("Add / Subtract"), COUNTER("Day Counter"), WEEKDAY("Day of Week"), REMINDER("Date Reminder"), DURATION("Duration Calculator"), CALENDAR("Calendar"), HISTORY("History"), CHANGELOG("Changelog")
+    AGE("Age"), DIFFERENCE("Date Difference"), ADD_SUBTRACT("Add / Subtract"), COUNTER("Day Counter"), WEEKDAY("Day of Week"), VALUE_TRACKER("Value Tracker"), REMINDER("Date Reminder"), DURATION("Duration Calculator"), CALENDAR("Calendar"), HISTORY("History"), CHANGELOG("Changelog")
 }
 
 data class DateParts(val day: Int?, val month: Int?, val year: Int?)
@@ -655,8 +660,31 @@ fun DayCalculatorApp(
         ThemeMode.SYSTEM -> isSystemInDarkTheme()
     }
 
+    // Keep a separate scroll state for Home and every tool. A tool opened fresh
+    // starts at the top; returning from a child screen restores its prior state.
+    val homeScrollState = rememberScrollState()
+    val toolScrollStates = rememberSaveable(
+        saver = Saver<MutableMap<MainTab, ScrollState>, Map<String, Int>>(
+            save = { states -> states.mapKeys { it.key.name }.mapValues { it.value.value } },
+            restore = { saved ->
+                mutableStateMapOf<MainTab, ScrollState>().apply {
+                    MainTab.entries.forEach { tab -> put(tab, ScrollState(saved[tab.name] ?: 0)) }
+                }
+            }
+        )
+    ) {
+        mutableStateMapOf<MainTab, ScrollState>().apply {
+            MainTab.entries.forEach { put(it, ScrollState(0)) }
+        }
+    }
+    // Snapshot the delegated state before using it in a lambda; this avoids Kotlin's
+    // delegated-property smart-cast limitation while keeping per-tool scroll restoration.
+    val activeToolForScroll = selectedTool
+    val contentScrollState = activeToolForScroll?.let { tool -> toolScrollStates.getValue(tool) } ?: homeScrollState
+
     LaunchedEffect(openReminder) {
         if (openReminder) {
+            toolScrollStates[MainTab.REMINDER] = ScrollState(0)
             selectedTool = MainTab.REMINDER
             onOpenReminderHandled()
         }
@@ -674,10 +702,6 @@ fun DayCalculatorApp(
     }
 
     BackHandler(enabled = selectedTool != null) { navigateBack() }
-
-    // Keep a separate scroll position for each screen so navigating between
-    // Home and tools never carries the previous screen's scroll offset over.
-    val contentScrollState = remember(selectedTool) { ScrollState(0) }
 
     MaterialTheme(
         colorScheme = if (darkTheme) darkColorScheme(
@@ -819,7 +843,13 @@ fun DayCalculatorApp(
                     .padding(horizontal = 16.dp, vertical = 12.dp)
             ) {
                 if (selectedTool == null) {
-                    HomeScreen(onSelect = { historyEntry = null; returnTool = null; selectedTool = it })
+                    HomeScreen(onSelect = {
+                        historyEntry = null
+                        returnTool = null
+                        // Opening a section from Home is a fresh visit, so start at its top.
+                        toolScrollStates[it] = ScrollState(0)
+                        selectedTool = it
+                    })
                 } else {
                     CompositionLocalProvider(LocalCalculatorStatePersistenceEnabled provides (historyEntry == null)) {
                     // Historical entries are temporary previews. Give each preview its own
@@ -829,6 +859,7 @@ fun DayCalculatorApp(
                         MainTab.AGE -> AgeScreen(historyEntry)
                         MainTab.DIFFERENCE -> DateDifferenceScreen(holidays, { showHolidaySettings = true }, historyEntry)
                         MainTab.ADD_SUBTRACT -> AddSubtractScreen(holidays, { showHolidaySettings = true }, historyEntry)
+                        MainTab.VALUE_TRACKER -> ValueTrackerScreen()
                         MainTab.COUNTER -> DayCounterScreen(holidays, { showHolidaySettings = true }, historyEntry)
                         MainTab.WEEKDAY -> DayOfWeekScreen(historyEntry)
                         MainTab.DURATION -> DurationCalculatorScreen(darkTheme, historyEntry)
@@ -845,6 +876,8 @@ fun DayCalculatorApp(
                             onOpenReminder = { reminderId ->
                                 returnTool = MainTab.CALENDAR
                                 historyEntry = null
+                                // Calendar's reminder shortcut opens Reminder at the top.
+                                toolScrollStates[MainTab.REMINDER] = ScrollState(0)
                                 selectedTool = MainTab.REMINDER
                                 // Open the Date Reminder section only; do not enter edit mode.
                                 calendarReminderId = reminderId
@@ -853,11 +886,13 @@ fun DayCalculatorApp(
                                 if (entry == null) {
                                     historyEntry = null
                                     returnTool = MainTab.CALENDAR
+                                    // Opening History from Calendar is a fresh visit.
+                                    toolScrollStates[MainTab.HISTORY] = ScrollState(0)
                                     selectedTool = MainTab.HISTORY
                                 } else {
                                     historyEntry = entry
                                     returnTool = MainTab.CALENDAR
-                                    selectedTool = when (entry.type) {
+                                    val targetTool = when (entry.type) {
                                         HistoryType.AGE -> MainTab.AGE
                                         HistoryType.DIFFERENCE -> MainTab.DIFFERENCE
                                         HistoryType.ADD_SUBTRACT -> MainTab.ADD_SUBTRACT
@@ -865,13 +900,16 @@ fun DayCalculatorApp(
                                         HistoryType.WEEKDAY -> MainTab.WEEKDAY
                                         HistoryType.DURATION -> MainTab.DURATION
                                     }
+                                    // A newly opened history preview starts at the top.
+                                    toolScrollStates[targetTool] = ScrollState(0)
+                                    selectedTool = targetTool
                                 }
                             }
                         )
                         MainTab.HISTORY -> HistoryScreen(onReopen = { entry ->
                             historyEntry = entry
                             returnTool = MainTab.HISTORY
-                            selectedTool = when (entry.type) {
+                            val targetTool = when (entry.type) {
                                 HistoryType.AGE -> MainTab.AGE
                                 HistoryType.DIFFERENCE -> MainTab.DIFFERENCE
                                 HistoryType.ADD_SUBTRACT -> MainTab.ADD_SUBTRACT
@@ -879,6 +917,9 @@ fun DayCalculatorApp(
                                 HistoryType.WEEKDAY -> MainTab.WEEKDAY
                                 HistoryType.DURATION -> MainTab.DURATION
                             }
+                            // A newly opened history preview starts at the top.
+                            toolScrollStates[targetTool] = ScrollState(0)
+                            selectedTool = targetTool
                         })
                         MainTab.CHANGELOG -> ChangelogScreen()
                         null -> Unit
@@ -929,7 +970,8 @@ private fun HomeScreen(onSelect: (MainTab) -> Unit) {
     ToolCard("Day Counter", "Count days from a date", "04", onClick = { onSelect(MainTab.COUNTER) })
     ToolCard("Day of Week", "Find the weekday for any date", "05", onClick = { onSelect(MainTab.WEEKDAY) })
     ToolCard("Duration Calculator", "Find time between dates", "06", onClick = { onSelect(MainTab.DURATION) })
-    ToolCard("Date Reminder", "Remember important dates", "07", onClick = { onSelect(MainTab.REMINDER) })
+    ToolCard("Value Tracker", "Track value over time", "07", onClick = { onSelect(MainTab.VALUE_TRACKER) })
+    ReminderToolCard(onClick = { onSelect(MainTab.REMINDER) })
 
     Spacer(Modifier.height(14.dp))
     Text(
@@ -972,6 +1014,24 @@ private fun ToolCard(title: String, subtitle: String, number: String, onClick: (
                 Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(2.dp))
                 Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Text("›", style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+private fun ReminderToolCard(onClick: () -> Unit) {
+    Card(Modifier.fillMaxWidth().padding(vertical = 5.dp).clip(RoundedCornerShape(18.dp)).clickable(onClick = onClick), shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 15.dp), verticalAlignment = Alignment.CenterVertically) {
+            Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surface, tonalElevation = 1.dp) {
+                Icon(painterResource(R.drawable.ic_reminder), contentDescription = "Reminder", tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(10.dp).size(28.dp))
+            }
+            Spacer(Modifier.width(14.dp))
+            Column(Modifier.weight(1f)) {
+                Text("Date Reminder", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(2.dp))
+                Text("Remember important dates", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Text("›", style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
@@ -1556,6 +1616,197 @@ fun DateDifferenceScreen(holidays: List<Holiday>, openSettings: () -> Unit, hist
         modifier = Modifier.fillMaxWidth()
     ) {
         Text("Reset")
+    }
+}
+
+@Composable
+private fun ValueTrackerScreen() {
+    val today = LocalDate.now()
+    var start by rememberPersistentState("valueTracker.start", DateInputState.from(today), ::encodeDateInput, ::decodeDateInput)
+    var target by rememberPersistentState("valueTracker.target", DateInputState.from(today), ::encodeDateInput, ::decodeDateInput)
+    var startingValue by rememberPersistentState("valueTracker.startingValue", "", { it }, { it })
+    var amount by rememberPersistentState("valueTracker.amount", "", { it }, { it })
+    var add by rememberPersistentState("valueTracker.add", true, { it.toString() }, { it.toBooleanStrictOrNull() ?: true })
+    var frequency by rememberPersistentState(
+        "valueTracker.frequency", "Daily", { it },
+        { saved -> if (saved in setOf("Daily", "Weekly", "Monthly", "Every few days")) saved else "Daily" }
+    )
+    var customDays by rememberPersistentState("valueTracker.customDays", "", { it }, { it })
+    var unit by rememberPersistentState("valueTracker.unit", "", { it }, { it })
+    var calculated by rememberPersistentState("valueTracker.calculated", false, { it.toString() }, { it.toBooleanStrictOrNull() ?: false })
+    var frequencyMenu by remember { mutableStateOf(false) }
+
+    Text("Value Tracker", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+    Text("Calculate how a value changes over time.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Spacer(Modifier.height(14.dp))
+    DateSelector("Start Date", start, { start = it; calculated = false }, allowToday = true)
+    Spacer(Modifier.height(8.dp))
+    DateSelector("Target Date", target, { target = it; calculated = false }, allowToday = true)
+    val selectedStartDate = start.toDate()
+    val selectedTargetDate = target.toDate()
+    val dateRangeInvalid = selectedStartDate != null && selectedTargetDate != null && selectedTargetDate.isBefore(selectedStartDate)
+    if (dateRangeInvalid) {
+        Spacer(Modifier.height(6.dp))
+        ErrorText("Target date must be on or after the start date.")
+    }
+    Spacer(Modifier.height(8.dp))
+    OutlinedTextField(
+        value = amount,
+        onValueChange = { amount = it.filter { c -> c.isDigit() || c == '.' }.let { v -> if (v.count { c -> c == '.' } <= 1) v else amount }; calculated = false },
+        label = { Text("Value each time") },
+        placeholder = { Text("Enter value") },
+        singleLine = true,
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+        modifier = Modifier.fillMaxWidth()
+    )
+    Spacer(Modifier.height(12.dp))
+    Text("Operation", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        RadioButton(selected = add, onClick = { add = true; calculated = false })
+        Text("Add", modifier = Modifier.clickable { add = true; calculated = false })
+        Spacer(Modifier.width(18.dp))
+        RadioButton(selected = !add, onClick = { add = false; calculated = false })
+        Text("Subtract", modifier = Modifier.clickable { add = false; calculated = false })
+    }
+    Spacer(Modifier.height(4.dp))
+    OutlinedTextField(
+        value = startingValue,
+        onValueChange = { startingValue = it.filter { c -> c.isDigit() || c == '.' || c == '-' }.let { v -> if (v.count { c -> c == '.' } <= 1 && v.drop(1).none { c -> c == '-' }) v else startingValue }; calculated = false },
+        label = { Text("Starting value (optional)") },
+        placeholder = { Text("Leave blank to start from zero") },
+        singleLine = true,
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+        modifier = Modifier.fillMaxWidth()
+    )
+    val startingValueInvalid = startingValue.isNotBlank() && (startingValue.toDoubleOrNull()?.isFinite() != true)
+    if (startingValueInvalid) {
+        Spacer(Modifier.height(4.dp))
+        ErrorText("Enter a valid starting value.")
+    }
+    Spacer(Modifier.height(10.dp))
+    Box(Modifier.fillMaxWidth()) {
+        OutlinedTextField(
+            value = if (frequency == "Every few days") "Custom interval" else frequency,
+            onValueChange = {},
+            readOnly = true,
+            label = { Text("Frequency") },
+            trailingIcon = { Text("▾") },
+            modifier = Modifier.fillMaxWidth()
+                .semantics {
+                    contentDescription = "Frequency dropdown"
+                    stateDescription = if (frequency == "Every few days") "Custom interval" else frequency
+                    role = Role.Button
+                }
+                .clickable { frequencyMenu = true }
+        )
+        Box(Modifier.matchParentSize().clickable { frequencyMenu = true })
+        DropdownMenu(
+            expanded = frequencyMenu,
+            onDismissRequest = { frequencyMenu = false },
+            shape = RoundedCornerShape(14.dp),
+            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+            tonalElevation = 0.dp,
+            shadowElevation = 4.dp,
+            border = androidx.compose.foundation.BorderStroke(
+                0.75.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)
+            )
+        ) {
+            Column(
+                modifier = Modifier
+                    .width(144.dp)
+                    .heightIn(max = 240.dp)
+                    .verticalScroll(rememberScrollState())
+            ) {
+                listOf(
+                    "Daily" to "Daily",
+                    "Weekly" to "Weekly",
+                    "Monthly" to "Monthly",
+                    "Custom interval" to "Every few days"
+                ).forEach { (label, value) ->
+                    DropdownMenuItem(
+                        text = { Text(label, softWrap = true) },
+                        onClick = { frequency = value; frequencyMenu = false; calculated = false },
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                    )
+                }
+            }
+        }
+    }
+    if (frequency == "Every few days") {
+        Spacer(Modifier.height(8.dp))
+        OutlinedTextField(
+            value = customDays,
+            onValueChange = { customDays = it.filter(Char::isDigit).take(4); calculated = false },
+            label = { Text("Repeat every (days)") },
+            placeholder = { Text("e.g. 3") },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            modifier = Modifier.fillMaxWidth()
+        )
+    }
+    Spacer(Modifier.height(8.dp))
+    OutlinedTextField(
+        value = unit,
+        onValueChange = { unit = it.take(20); calculated = false },
+        label = { Text("Unit (optional)") },
+        placeholder = { Text("e.g. rupees, points, items") },
+        singleLine = true,
+        modifier = Modifier.fillMaxWidth()
+    )
+
+    val startDate = start.toDate()
+    val targetDate = target.toDate()
+    val initial = startingValue.toDoubleOrNull() ?: if (startingValue.isBlank()) 0.0 else Double.NaN
+    val change = amount.toDoubleOrNull()
+    val intervalDays = when (frequency) { "Daily" -> 1L; "Weekly" -> 7L; "Monthly" -> 0L; else -> customDays.toLongOrNull() ?: 0L }
+    val valid = startDate != null && targetDate != null && !targetDate.isBefore(startDate) && !startingValueInvalid && initial.isFinite() && change != null && change.isFinite() && change >= 0.0 && (frequency == "Monthly" || intervalDays > 0L)
+    Spacer(Modifier.height(12.dp))
+    Button(onClick = { calculated = true }, enabled = valid, modifier = Modifier.fillMaxWidth()) { Text("Calculate") }
+    Spacer(Modifier.height(8.dp))
+    OutlinedButton(onClick = {
+        start = DateInputState.from(LocalDate.now()); target = DateInputState.from(LocalDate.now())
+        startingValue = ""; amount = ""; add = true; frequency = "Daily"; customDays = ""; unit = ""; calculated = false
+    }, modifier = Modifier.fillMaxWidth()) { Text("Reset") }
+
+    if (calculated) {
+        if (!valid) {
+            ErrorText("Check the dates and enter valid non-negative amounts.")
+        } else {
+            val occurrences = if (frequency == "Monthly") {
+                // Monthly occurrences always use the original start date as the anchor
+                // (for example, Jan 31 -> Feb 28 -> Mar 31). Count them directly
+                // instead of looping potentially hundreds of thousands of times
+                // during composition.
+                val wholeMonths = ChronoUnit.MONTHS.between(startDate!!, targetDate!!)
+                val baseCount = wholeMonths + 1L // includes the start date
+                if (startDate.plusMonths(baseCount).isAfter(targetDate)) baseCount else baseCount + 1L
+            } else {
+                val days = ChronoUnit.DAYS.between(startDate!!, targetDate!!)
+                days / intervalDays + 1L
+            }
+            val signedChange = if (add) change!! else -change!!
+            val result = initial + signedChange * occurrences.toDouble()
+            if (!result.isFinite() || occurrences >= 1_000_000L) {
+                ErrorText("This date range or value is too large to calculate safely.")
+            } else {
+                val formatted = java.text.DecimalFormat("#,##0.########").format(result)
+                val unitText = unit.trim()
+                val valueText = if (unitText.isEmpty()) formatted else "$formatted $unitText"
+                val action = if (add) "adding" else "subtracting"
+                val amountText = java.text.DecimalFormat("#,##0.########").format(change!!)
+                val unitLabel = if (unitText.isEmpty()) "units" else unitText
+                val frequencyLabel = when (frequency) {
+                    "Daily" -> "daily"
+                    "Weekly" -> "weekly"
+                    "Monthly" -> "monthly"
+                    else -> "every $intervalDays days"
+                }
+                val startingLabel = if (initial != 0.0) "Starting from ${java.text.DecimalFormat("#,##0.########").format(initial)}, " else ""
+                val detail = "${startingLabel}${action} $amountText $unitLabel $frequencyLabel for $occurrences ${if (occurrences == 1L) "occurrence" else "occurrences"}, from ${formatDate(startDate!!)} to ${formatDate(targetDate!!)}."
+                ResultCard("Result", valueText, detail)
+                ResultActions("Value Tracker result: $valueText\n$detail")
+            }
+        }
     }
 }
 
@@ -2615,6 +2866,16 @@ private fun AboutDialog(darkTheme: Boolean, onDismiss: () -> Unit, onOpenChangel
 @Composable
 private fun ChangelogScreen() {
     val entries = listOf(
+        "3.43.7" to listOf(
+            "New" to listOf(
+                "Added Value Tracker to track how values change over time, with customizable intervals, optional starting values and units, and Copy/Share results."
+            ),
+            "Improvements" to listOf(
+                "Improved Value Tracker layout, labels, date validation, frequency dropdown styling, and calculation performance for large date ranges.",
+                "Improved scroll restoration across Home and individual sections. Returning from tools or detail screens preserves the previous scroll position, while newly opened sections start at the top.",
+                "Moved Date Reminder to the end of the Home screen cards and replaced its number with a theme-adaptive icon."
+            )
+        ),
         "3.43.6" to listOf(
             "UI Improvements" to listOf(
                 "Matched the home-screen overflow menu background to the main cards and added rounded corners.",

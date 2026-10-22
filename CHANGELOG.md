@@ -1,12 +1,30 @@
 # Changelog
 
+## 3.43.7
+
+### New
+- Added Value Tracker to calculate values by adding or subtracting at daily, weekly, monthly, or every-few-days intervals.
+- Added optional starting value and unit, date range selection, and Copy/Share results.
+- Value Tracker remembers the last-used inputs locally on the device.
+- Moved Date Reminder to the end of the main cards and replaced its number with a theme-adaptive reminder icon.
+
+### Improvements
+- Reorganized Value Tracker inputs into full-width rows to improve readability and prevent labels from wrapping on narrow screens.
+- Simplified Value Tracker labels and added clearer input hints, including a dedicated “Repeat every (days)” field for custom intervals.
+- Added a Value Tracker date-range warning when the Target Date is earlier than the Start Date.
+- Rounded the Value Tracker frequency dropdown to match the Holiday month picker in Light and Dark themes.
+- Improved result wording for every-few-days calculations and omitted zero starting values from the result description.
+- Restored each section's scroll position when returning, while freshly opened sections start at the top, including after recreation.
+- Optimized monthly Value Tracker occurrence counting for large date ranges.
+- Reset now clears the Value Tracker starting value, amount, and custom interval instead of restoring sample values.
+
+
 ## 3.43.6
 
 ### UI Improvements
 - Matched the home-screen overflow menu background to the main cards and added rounded corners.
 - Matched Holiday dropdown backgrounds to the app surfaces and refined their borders for Light and Dark themes.
 - Balanced dropdown sizing: a wider month list, a comfortable day-number list, and equal scrollable maximum heights.
-
 - Rounded the Holiday list container without changing its existing colours.
 
 ## 3.43.5
