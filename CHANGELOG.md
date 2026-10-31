@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.43.8
+
+### Fixes
+- Integrated Value Tracker calculations with the existing History section and Calendar history system.
+
 ## 3.43.7
 
 ### New

@@ -229,7 +229,7 @@ data class Holiday(val month: Int, val day: Int, val name: String)
 
 
 enum class HistoryType(val label: String) {
-    AGE("Age"), DIFFERENCE("Date Difference"), ADD_SUBTRACT("Add / Subtract"), COUNTER("Day Counter"), WEEKDAY("Day of Week"), DURATION("Duration Calculator")
+    AGE("Age"), DIFFERENCE("Date Difference"), ADD_SUBTRACT("Add / Subtract"), COUNTER("Day Counter"), WEEKDAY("Day of Week"), DURATION("Duration Calculator"), VALUE_TRACKER("Value Tracker")
 }
 
 data class HistoryEntry(
@@ -859,7 +859,7 @@ fun DayCalculatorApp(
                         MainTab.AGE -> AgeScreen(historyEntry)
                         MainTab.DIFFERENCE -> DateDifferenceScreen(holidays, { showHolidaySettings = true }, historyEntry)
                         MainTab.ADD_SUBTRACT -> AddSubtractScreen(holidays, { showHolidaySettings = true }, historyEntry)
-                        MainTab.VALUE_TRACKER -> ValueTrackerScreen()
+                        MainTab.VALUE_TRACKER -> ValueTrackerScreen(historyEntry)
                         MainTab.COUNTER -> DayCounterScreen(holidays, { showHolidaySettings = true }, historyEntry)
                         MainTab.WEEKDAY -> DayOfWeekScreen(historyEntry)
                         MainTab.DURATION -> DurationCalculatorScreen(darkTheme, historyEntry)
@@ -899,6 +899,7 @@ fun DayCalculatorApp(
                                         HistoryType.COUNTER -> MainTab.COUNTER
                                         HistoryType.WEEKDAY -> MainTab.WEEKDAY
                                         HistoryType.DURATION -> MainTab.DURATION
+                                        HistoryType.VALUE_TRACKER -> MainTab.VALUE_TRACKER
                                     }
                                     // A newly opened history preview starts at the top.
                                     toolScrollStates[targetTool] = ScrollState(0)
@@ -916,6 +917,7 @@ fun DayCalculatorApp(
                                 HistoryType.COUNTER -> MainTab.COUNTER
                                 HistoryType.WEEKDAY -> MainTab.WEEKDAY
                                 HistoryType.DURATION -> MainTab.DURATION
+                                HistoryType.VALUE_TRACKER -> MainTab.VALUE_TRACKER
                             }
                             // A newly opened history preview starts at the top.
                             toolScrollStates[targetTool] = ScrollState(0)
@@ -1620,7 +1622,7 @@ fun DateDifferenceScreen(holidays: List<Holiday>, openSettings: () -> Unit, hist
 }
 
 @Composable
-private fun ValueTrackerScreen() {
+private fun ValueTrackerScreen(historyEntry: HistoryEntry? = null) {
     val today = LocalDate.now()
     var start by rememberPersistentState("valueTracker.start", DateInputState.from(today), ::encodeDateInput, ::decodeDateInput)
     var target by rememberPersistentState("valueTracker.target", DateInputState.from(today), ::encodeDateInput, ::decodeDateInput)
@@ -1635,6 +1637,22 @@ private fun ValueTrackerScreen() {
     var unit by rememberPersistentState("valueTracker.unit", "", { it }, { it })
     var calculated by rememberPersistentState("valueTracker.calculated", false, { it.toString() }, { it.toBooleanStrictOrNull() ?: false })
     var frequencyMenu by remember { mutableStateOf(false) }
+    val context = androidx.compose.ui.platform.LocalContext.current
+
+    LaunchedEffect(historyEntry?.id) {
+        if (historyEntry?.type == HistoryType.VALUE_TRACKER) {
+            val o = JSONObject(historyEntry.payload)
+            parseDatePayload(historyEntry.payload, "startDate")?.let { start = DateInputState.from(it) }
+            parseDatePayload(historyEntry.payload, "targetDate")?.let { target = DateInputState.from(it) }
+            startingValue = o.optString("startingValue", "")
+            amount = o.optString("amount", "")
+            add = o.optBoolean("add", true)
+            frequency = o.optString("frequency", "Daily")
+            customDays = o.optString("customDays", "")
+            unit = o.optString("unit", "")
+            calculated = true
+        }
+    }
 
     Text("Value Tracker", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
     Text("Calculate how a value changes over time.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -1803,6 +1821,25 @@ private fun ValueTrackerScreen() {
                 }
                 val startingLabel = if (initial != 0.0) "Starting from ${java.text.DecimalFormat("#,##0.########").format(initial)}, " else ""
                 val detail = "${startingLabel}${action} $amountText $unitLabel $frequencyLabel for $occurrences ${if (occurrences == 1L) "occurrence" else "occurrences"}, from ${formatDate(startDate!!)} to ${formatDate(targetDate!!)}."
+                val historyPayload = JSONObject()
+                    .put("startDate", startDate.toString())
+                    .put("targetDate", targetDate.toString())
+                    .put("startingValue", startingValue)
+                    .put("amount", amount)
+                    .put("add", add)
+                    .put("frequency", frequency)
+                    .put("customDays", customDays)
+                    .put("unit", unit)
+                    .toString()
+                LaunchedEffect(calculated) {
+                    if (calculated && historyEntry == null) {
+                        val id = HistoryStore.nextId(context)
+                        HistoryStore.addCalculationUnlessAlreadyLatest(
+                            context,
+                            HistoryEntry(id, HistoryType.VALUE_TRACKER, id, valueText, detail, historyPayload)
+                        )
+                    }
+                }
                 ResultCard("Result", valueText, detail)
                 ResultActions("Value Tracker result: $valueText\n$detail")
             }
@@ -2866,6 +2903,11 @@ private fun AboutDialog(darkTheme: Boolean, onDismiss: () -> Unit, onOpenChangel
 @Composable
 private fun ChangelogScreen() {
     val entries = listOf(
+        "3.43.8" to listOf(
+            "Fixes" to listOf(
+                "Integrated Value Tracker calculations with the existing History section and Calendar history system."
+            )
+        ),
         "3.43.7" to listOf(
             "New" to listOf(
                 "Added Value Tracker to track how values change over time, with customizable intervals, optional starting values and units, and Copy/Share results."
