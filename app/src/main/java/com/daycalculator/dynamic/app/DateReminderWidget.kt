@@ -312,10 +312,14 @@ open class DateReminderWidget : AppWidgetProvider() {
 
         private fun isWidgetDark(context: Context): Boolean {
             val prefs = context.getSharedPreferences("day_calculator_settings", Context.MODE_PRIVATE)
+            // The widget intentionally has only two appearances: Light and pure black.
+            // System Default follows Android's current light/dark mode; either manual
+            // dark variant (DARK or AMOLED) uses the same pure-black widget background.
             return when (prefs.getString("theme_mode", "SYSTEM")) {
-                "DARK" -> true
                 "LIGHT" -> false
-                else -> (context.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) == android.content.res.Configuration.UI_MODE_NIGHT_YES
+                "DARK", "AMOLED" -> true
+                else -> (context.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
+                    android.content.res.Configuration.UI_MODE_NIGHT_YES
             }
         }
 
@@ -433,7 +437,12 @@ open class DateReminderWidget : AppWidgetProvider() {
             if (period.months != 0) parts += "${period.months} ${if (period.months == 1) "month" else "months"}"
             if (period.days != 0) parts += "${period.days} ${if (period.days == 1) "day" else "days"}"
             if (hours != 0L) parts += "$hours ${if (hours == 1L) "hour" else "hours"}"
-            if (minutes != 0L || parts.isEmpty()) parts += "$minutes min"
+            val remainingText = when {
+                minutes > 0L && parts.isNotEmpty() -> parts.joinToString(" · ") + "\n$minutes ${if (minutes == 1L) "minute" else "minutes"} left"
+                minutes > 0L -> "$minutes ${if (minutes == 1L) "minute" else "minutes"} left"
+                parts.isNotEmpty() -> parts.joinToString(" · ") + " left"
+                else -> "0 minutes left"
+            }
 
             val shortParts = mutableListOf<String>()
             if (period.months != 0) shortParts += "${period.months} ${if (period.months == 1) "month" else "months"}"
@@ -442,7 +451,7 @@ open class DateReminderWidget : AppWidgetProvider() {
 
             return YearProgressData(
                 date.year, total, passed, left, percent,
-                parts.joinToString(" · ") + " left",
+                remainingText,
                 shortParts.joinToString(" ") + " left"
             )
         }
@@ -480,11 +489,11 @@ open class DateReminderWidget : AppWidgetProvider() {
 
         private fun applyWidgetPalette(context: Context, views: RemoteViews, reminder: DateReminder?) {
             val dark = isWidgetDark(context)
-            // Match the app's Material 3 card surfaces: #F5F5F5 in Light and
-            // #151515 in Dark, with near-black/near-white primary text.
-            val background = if (dark) Color.rgb(21, 21, 21) else Color.rgb(245, 245, 245)
+            // The widget has only two appearances: Light and pure black.
+            // Both manual dark variants (Dark and AMOLED) use pure black.
+            // System Default follows Android's current light/dark mode.
             val foreground = if (dark) Color.rgb(245, 245, 245) else Color.rgb(17, 17, 17)
-            // Keep the rounded widget drawable; applying a flat color would remove its corners.
+            // Preserve rounded corners; widget_background_dark is pure black (#000000).
             views.setInt(
                 R.id.widget_root,
                 "setBackgroundResource",
@@ -606,7 +615,19 @@ open class DateReminderWidget : AppWidgetProvider() {
                     // decorative label or refresh control.
                     views.setViewVisibility(R.id.widget_label, android.view.View.GONE)
                     views.setTextViewText(R.id.widget_label, "")
-                    views.setTextViewText(R.id.widget_title, reminder.title)
+                    val displayTitle = if (isSmall) {
+                        // Keep the first word as a clear heading and place the rest
+                        // on line two. Let the TextView's real width, maxLines=2,
+                        // and ellipsize handle long names naturally instead of
+                        // truncating after a fixed number of words.
+                        val words = reminder.title.trim().split(Regex("\\s+")).filter { it.isNotBlank() }
+                        when {
+                            words.isEmpty() -> reminder.title.trim()
+                            words.size == 1 -> words[0]
+                            else -> "${words.first()}\n${words.drop(1).joinToString(" ")}"
+                        }
+                    } else reminder.title
+                    views.setTextViewText(R.id.widget_title, displayTitle)
                     val now = LocalDateTime.now(ZoneId.systemDefault())
                     val today = now.toLocalDate()
                     val target = reminderTarget(reminder, now)

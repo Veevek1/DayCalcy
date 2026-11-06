@@ -1,5 +1,16 @@
 # Changelog
 
+## 3.43.9
+
+### New
+- Added a separate Dark theme with charcoal and dark-gray surfaces alongside Light and AMOLED.
+
+### Improvements
+- Improved small-widget reminder titles by placing the first word on line one and the remaining title on line two, with truncation based on the widget text width.
+- Updated the large Year Progress widget countdown to spell out “minutes” and place the minutes remaining on a second line.
+- Added a small history icon beside Changelog in the About section.
+- Updated Bitcoin support wording from “Donate” to “Support.”
+
 ## 3.43.8
 
 ### Fixes

@@ -64,7 +64,7 @@ fun DistributionSupportSection() {
             Surface(
                 modifier = Modifier.size(42.dp),
                 shape = RoundedCornerShape(12.dp),
-                color = MaterialTheme.colorScheme.surface
+                color = if (MaterialTheme.colorScheme.surface.luminance() < 0.5f) androidx.compose.ui.graphics.Color.Black else MaterialTheme.colorScheme.surface
             ) {
                 Image(
                     painter = painterResource(id = R.drawable.ic_support_coffee),
@@ -170,14 +170,14 @@ private fun BitcoinDonationDialog(onDismiss: () -> Unit) {
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Donate with Bitcoin") },
+        title = { Text("Support with Bitcoin") },
         text = {
             Column(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
-                    "To donate, open your Bitcoin wallet and scan this QR code using the Send option.",
+                    "To support, open your Bitcoin wallet and scan this QR code using the Send option.",
                     style = MaterialTheme.typography.bodyMedium,
                     textAlign = TextAlign.Center
                 )
@@ -272,7 +272,7 @@ private fun SupportMethodCard(
             Surface(
                 modifier = Modifier.size(40.dp),
                 shape = RoundedCornerShape(10.dp),
-                color = MaterialTheme.colorScheme.surface,
+                color = if (isDark) androidx.compose.ui.graphics.Color.Black else MaterialTheme.colorScheme.surface,
                 content = leading
             )
             Spacer(Modifier.width(12.dp))

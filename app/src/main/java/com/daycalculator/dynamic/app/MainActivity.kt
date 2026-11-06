@@ -167,11 +167,8 @@ class MainActivity : ComponentActivity() {
     fun applySystemBarAppearance(themeMode: ThemeMode) {
         val systemDark = (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) ==
             Configuration.UI_MODE_NIGHT_YES
-        val dark = when (themeMode) {
-            ThemeMode.DARK -> true
-            ThemeMode.LIGHT -> false
-            ThemeMode.SYSTEM -> systemDark
-        }
+        val effectiveMode = resolveEffectiveThemeMode(this, themeMode, systemDark)
+        val dark = effectiveMode != ThemeMode.LIGHT
 
         // Only change the icon appearance here. The bars themselves remain
         // transparent, so the app's Compose background is visible underneath
@@ -218,7 +215,7 @@ private const val HOLIDAYS_KEY = "custom_holidays"
 /** Historical calculations are previews; they must not overwrite the user's separately saved calculator inputs. */
 private val LocalCalculatorStatePersistenceEnabled = compositionLocalOf { true }
 
-enum class ThemeMode { SYSTEM, LIGHT, DARK }
+enum class ThemeMode { SYSTEM, LIGHT, DARK, AMOLED }
 
 enum class MainTab(val label: String) {
     AGE("Age"), DIFFERENCE("Date Difference"), ADD_SUBTRACT("Add / Subtract"), COUNTER("Day Counter"), WEEKDAY("Day of Week"), VALUE_TRACKER("Value Tracker"), REMINDER("Date Reminder"), DURATION("Duration Calculator"), CALENDAR("Calendar"), HISTORY("History"), CHANGELOG("Changelog")
@@ -422,17 +419,57 @@ private val monthNames = listOf(
     "July", "August", "September", "October", "November", "December"
 )
 
-private fun loadThemeMode(context: Context): ThemeMode = when (
-    context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getString(THEME_KEY, ThemeMode.SYSTEM.name)
-) {
-    ThemeMode.LIGHT.name -> ThemeMode.LIGHT
-    ThemeMode.DARK.name -> ThemeMode.DARK
-    else -> ThemeMode.SYSTEM
+private const val THEME_MIGRATION_3439_KEY = "theme_mode_migrated_3439"
+
+private fun loadThemeMode(context: Context): ThemeMode {
+    val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    val stored = prefs.getString(THEME_KEY, ThemeMode.SYSTEM.name)
+    // Before 3.43.9, DARK meant pure black. Preserve that existing choice as AMOLED
+    // exactly once; subsequent DARK selections refer to the new charcoal theme.
+    if (!prefs.getBoolean(THEME_MIGRATION_3439_KEY, false)) {
+        val migratedLegacyPureDark = stored == "DARK"
+        if (migratedLegacyPureDark) prefs.edit().putString(THEME_KEY, ThemeMode.AMOLED.name).apply()
+        prefs.edit().putBoolean(THEME_MIGRATION_3439_KEY, true).apply()
+        if (migratedLegacyPureDark) DateReminderWidget.updateAll(context)
+        return if (migratedLegacyPureDark) ThemeMode.AMOLED else when (stored) {
+            ThemeMode.LIGHT.name -> ThemeMode.LIGHT
+            ThemeMode.AMOLED.name -> ThemeMode.AMOLED
+            null -> ThemeMode.SYSTEM
+            else -> ThemeMode.SYSTEM
+        }
+    }
+    return when (stored) {
+        ThemeMode.LIGHT.name -> ThemeMode.LIGHT
+        ThemeMode.DARK.name -> ThemeMode.DARK
+        ThemeMode.AMOLED.name -> ThemeMode.AMOLED
+        else -> ThemeMode.SYSTEM
+    }
+}
+
+private const val LAST_DARK_THEME_KEY = "last_manual_dark_theme"
+
+private fun resolveEffectiveThemeMode(
+    context: Context,
+    selectedMode: ThemeMode,
+    systemDark: Boolean
+): ThemeMode {
+    if (selectedMode != ThemeMode.SYSTEM) return selectedMode
+    if (!systemDark) return ThemeMode.LIGHT
+
+    val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    return when (prefs.getString(LAST_DARK_THEME_KEY, ThemeMode.AMOLED.name)) {
+        ThemeMode.DARK.name -> ThemeMode.DARK
+        else -> ThemeMode.AMOLED
+    }
 }
 
 private fun saveThemeMode(context: Context, mode: ThemeMode) {
-    context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
-        .putString(THEME_KEY, mode.name).apply()
+    val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    val editor = prefs.edit().putString(THEME_KEY, mode.name)
+    if (mode == ThemeMode.DARK || mode == ThemeMode.AMOLED) {
+        editor.putString(LAST_DARK_THEME_KEY, mode.name)
+    }
+    editor.apply()
     DateReminderWidget.updateAll(context)
 }
 
@@ -463,11 +500,8 @@ private fun WidgetReminderChooser(
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val themeMode = remember { mutableStateOf(loadThemeMode(context)) }
-    val dark = when (themeMode.value) {
-        ThemeMode.DARK -> true
-        ThemeMode.LIGHT -> false
-        ThemeMode.SYSTEM -> isSystemInDarkTheme()
-    }
+    val effectiveThemeMode = resolveEffectiveThemeMode(context, themeMode.value, isSystemInDarkTheme())
+    val dark = effectiveThemeMode != ThemeMode.LIGHT
     var selectedId by remember {
         mutableStateOf(DateReminderWidget.selectedReminderId(context, appWidgetId))
     }
@@ -478,20 +512,20 @@ private fun WidgetReminderChooser(
         colorScheme = if (dark) darkColorScheme(
             primary = Color.White,
             onPrimary = Color.Black,
-            background = Color.Black,
-            surface = Color.Black,
-            surfaceVariant = Color(0xFF151515),
-            surfaceContainerLowest = Color.Black,
-            surfaceContainerLow = Color(0xFF080808),
-            surfaceContainer = Color(0xFF101010),
-            surfaceContainerHigh = Color(0xFF151515),
-            surfaceContainerHighest = Color(0xFF1C1C1C),
+            background = if (effectiveThemeMode == ThemeMode.AMOLED) Color.Black else Color(0xFF121212),
+            surface = if (effectiveThemeMode == ThemeMode.AMOLED) Color.Black else Color(0xFF181818),
+            surfaceVariant = if (effectiveThemeMode == ThemeMode.AMOLED) Color(0xFF151515) else Color(0xFF242424),
+            surfaceContainerLowest = if (effectiveThemeMode == ThemeMode.AMOLED) Color.Black else Color(0xFF101010),
+            surfaceContainerLow = if (effectiveThemeMode == ThemeMode.AMOLED) Color(0xFF080808) else Color(0xFF191919),
+            surfaceContainer = if (effectiveThemeMode == ThemeMode.AMOLED) Color(0xFF101010) else Color(0xFF202020),
+            surfaceContainerHigh = if (effectiveThemeMode == ThemeMode.AMOLED) Color(0xFF151515) else Color(0xFF292929),
+            surfaceContainerHighest = if (effectiveThemeMode == ThemeMode.AMOLED) Color(0xFF1C1C1C) else Color(0xFF303030),
             onBackground = Color(0xFFF5F5F5),
             onSurface = Color(0xFFF5F5F5),
             onSurfaceVariant = Color(0xFFBDBDBD),
-            outline = Color(0xFF444444),
-            outlineVariant = Color(0xFF444444),
-            secondaryContainer = Color(0xFF2A2A2A),
+            outline = if (effectiveThemeMode == ThemeMode.AMOLED) Color(0xFF444444) else Color(0xFF505050),
+            outlineVariant = if (effectiveThemeMode == ThemeMode.AMOLED) Color(0xFF444444) else Color(0xFF505050),
+            secondaryContainer = if (effectiveThemeMode == ThemeMode.AMOLED) Color(0xFF2A2A2A) else Color(0xFF383838),
             onSecondaryContainer = Color(0xFFF5F5F5)
         ) else lightColorScheme(
             primary = Color(0xFF111111),
@@ -648,17 +682,15 @@ fun DayCalculatorApp(
     var showHolidaySettings by rememberSaveable { mutableStateOf(false) }
     var showAbout by rememberSaveable { mutableStateOf(false) }
     var menuExpanded by rememberSaveable { mutableStateOf(false) }
+    var darkVariantRefresh by rememberSaveable { mutableStateOf(0) }
     var historyEntry by rememberSaveable(stateSaver = HistoryEntrySaver) { mutableStateOf<HistoryEntry?>(null) }
     var returnTool by rememberSaveable { mutableStateOf<MainTab?>(null) }
     var calendarReminderId by rememberSaveable { mutableStateOf<String?>(null) }
     var calendarMonth by rememberSaveable(stateSaver = LocalDateSaver) { mutableStateOf(LocalDate.now().withDayOfMonth(1)) }
     var calendarSelectedDate by rememberSaveable(stateSaver = NullableLocalDateSaver) { mutableStateOf<LocalDate?>(LocalDate.now()) }
 
-    val darkTheme = when (themeMode) {
-        ThemeMode.DARK -> true
-        ThemeMode.LIGHT -> false
-        ThemeMode.SYSTEM -> isSystemInDarkTheme()
-    }
+    val effectiveThemeMode = resolveEffectiveThemeMode(context, themeMode, isSystemInDarkTheme())
+    val darkTheme = effectiveThemeMode != ThemeMode.LIGHT
 
     // Keep a separate scroll state for Home and every tool. A tool opened fresh
     // starts at the top; returning from a child screen restores its prior state.
@@ -707,20 +739,20 @@ fun DayCalculatorApp(
         colorScheme = if (darkTheme) darkColorScheme(
             primary = androidx.compose.ui.graphics.Color(0xFFFFFFFF),
             onPrimary = androidx.compose.ui.graphics.Color(0xFF000000),
-            background = androidx.compose.ui.graphics.Color(0xFF000000),
-            surface = androidx.compose.ui.graphics.Color(0xFF000000),
-            surfaceVariant = androidx.compose.ui.graphics.Color(0xFF151515),
-            surfaceContainerLowest = androidx.compose.ui.graphics.Color(0xFF000000),
-            surfaceContainerLow = androidx.compose.ui.graphics.Color(0xFF080808),
-            surfaceContainer = androidx.compose.ui.graphics.Color(0xFF101010),
-            surfaceContainerHigh = androidx.compose.ui.graphics.Color(0xFF151515),
-            surfaceContainerHighest = androidx.compose.ui.graphics.Color(0xFF1C1C1C),
+            background = if (effectiveThemeMode == ThemeMode.AMOLED) androidx.compose.ui.graphics.Color(0xFF000000) else androidx.compose.ui.graphics.Color(0xFF121212),
+            surface = if (effectiveThemeMode == ThemeMode.AMOLED) androidx.compose.ui.graphics.Color(0xFF000000) else androidx.compose.ui.graphics.Color(0xFF181818),
+            surfaceVariant = if (effectiveThemeMode == ThemeMode.AMOLED) androidx.compose.ui.graphics.Color(0xFF151515) else androidx.compose.ui.graphics.Color(0xFF242424),
+            surfaceContainerLowest = if (effectiveThemeMode == ThemeMode.AMOLED) androidx.compose.ui.graphics.Color(0xFF000000) else androidx.compose.ui.graphics.Color(0xFF101010),
+            surfaceContainerLow = if (effectiveThemeMode == ThemeMode.AMOLED) androidx.compose.ui.graphics.Color(0xFF080808) else androidx.compose.ui.graphics.Color(0xFF191919),
+            surfaceContainer = if (effectiveThemeMode == ThemeMode.AMOLED) androidx.compose.ui.graphics.Color(0xFF101010) else androidx.compose.ui.graphics.Color(0xFF202020),
+            surfaceContainerHigh = if (effectiveThemeMode == ThemeMode.AMOLED) androidx.compose.ui.graphics.Color(0xFF151515) else androidx.compose.ui.graphics.Color(0xFF292929),
+            surfaceContainerHighest = if (effectiveThemeMode == ThemeMode.AMOLED) androidx.compose.ui.graphics.Color(0xFF1C1C1C) else androidx.compose.ui.graphics.Color(0xFF303030),
             onBackground = androidx.compose.ui.graphics.Color(0xFFF5F5F5),
             onSurface = androidx.compose.ui.graphics.Color(0xFFF5F5F5),
             onSurfaceVariant = androidx.compose.ui.graphics.Color(0xFFBDBDBD),
-            outline = androidx.compose.ui.graphics.Color(0xFF444444),
-            outlineVariant = androidx.compose.ui.graphics.Color(0xFF444444),
-            secondaryContainer = androidx.compose.ui.graphics.Color(0xFF2A2A2A),
+            outline = if (effectiveThemeMode == ThemeMode.AMOLED) androidx.compose.ui.graphics.Color(0xFF444444) else androidx.compose.ui.graphics.Color(0xFF505050),
+            outlineVariant = if (effectiveThemeMode == ThemeMode.AMOLED) androidx.compose.ui.graphics.Color(0xFF444444) else androidx.compose.ui.graphics.Color(0xFF505050),
+            secondaryContainer = if (effectiveThemeMode == ThemeMode.AMOLED) androidx.compose.ui.graphics.Color(0xFF2A2A2A) else androidx.compose.ui.graphics.Color(0xFF383838),
             onSecondaryContainer = androidx.compose.ui.graphics.Color(0xFFF5F5F5)
         ) else lightColorScheme(
             primary = androidx.compose.ui.graphics.Color(0xFF111111),
@@ -808,18 +840,69 @@ fun DayCalculatorApp(
                                     0.75.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)
                                 )
                             ) {
-                                ThemeMode.entries.forEach { mode ->
-                                    DropdownMenuItem(
-                                        text = { Text(mode.label(true)) },
-                                        onClick = {
-                                            (context as? MainActivity)?.applySystemBarAppearance(mode)
-                                            themeMode = mode
-                                            saveThemeMode(context, mode)
-                                            menuExpanded = false
-                                        },
-                                        modifier = Modifier.height(40.dp),
-                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp)
+                                DropdownMenuItem(
+                                    text = { Text("System Default") },
+                                    onClick = {
+                                        (context as? MainActivity)?.applySystemBarAppearance(ThemeMode.SYSTEM)
+                                        themeMode = ThemeMode.SYSTEM
+                                        saveThemeMode(context, ThemeMode.SYSTEM)
+                                        menuExpanded = false
+                                    },
+                                    modifier = Modifier.height(40.dp),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp)
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Light") },
+                                    onClick = {
+                                        (context as? MainActivity)?.applySystemBarAppearance(ThemeMode.LIGHT)
+                                        themeMode = ThemeMode.LIGHT
+                                        saveThemeMode(context, ThemeMode.LIGHT)
+                                        menuExpanded = false
+                                    },
+                                    modifier = Modifier.height(40.dp),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp)
+                                )
+                                val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                                val rememberedDarkVariant = remember(darkVariantRefresh) {
+                                    if (prefs.getString(LAST_DARK_THEME_KEY, ThemeMode.AMOLED.name) == ThemeMode.DARK.name) {
+                                        ThemeMode.DARK
+                                    } else {
+                                        ThemeMode.AMOLED
+                                    }
+                                }
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().height(40.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        rememberedDarkVariant.label(),
+                                        modifier = Modifier.weight(1f)
+                                            .clickable {
+                                                (context as? MainActivity)?.applySystemBarAppearance(rememberedDarkVariant)
+                                                themeMode = rememberedDarkVariant
+                                                saveThemeMode(context, rememberedDarkVariant)
+                                                menuExpanded = false
+                                            }
+                                            .padding(start = 12.dp),
+                                        color = MaterialTheme.colorScheme.onSurface
                                     )
+                                    IconButton(
+                                        onClick = {
+                                            val nextVariant = if (rememberedDarkVariant == ThemeMode.AMOLED) ThemeMode.DARK else ThemeMode.AMOLED
+                                            prefs.edit().putString(LAST_DARK_THEME_KEY, nextVariant.name).apply()
+                                            darkVariantRefresh++
+                                            if (themeMode == ThemeMode.DARK || themeMode == ThemeMode.AMOLED) {
+                                                themeMode = nextVariant
+                                                (context as? MainActivity)?.applySystemBarAppearance(nextVariant)
+                                                saveThemeMode(context, nextVariant)
+                                            } else {
+                                                DateReminderWidget.updateAll(context)
+                                            }
+                                        },
+                                        modifier = Modifier.size(40.dp)
+                                    ) {
+                                        Text(">", style = MaterialTheme.typography.titleMedium)
+                                    }
                                 }
                                 HorizontalDivider()
                                 DropdownMenuItem(
@@ -1061,6 +1144,7 @@ private fun ThemeMode.label(full: Boolean = false): String = when (this) {
     ThemeMode.SYSTEM -> if (full) "System Default" else "System"
     ThemeMode.LIGHT -> "Light"
     ThemeMode.DARK -> "Dark"
+    ThemeMode.AMOLED -> "AMOLED"
 }
 
 @Composable
@@ -2883,14 +2967,25 @@ private fun AboutDialog(darkTheme: Boolean, onDismiss: () -> Unit, onOpenChangel
 
                 if (BuildConfig.SHOW_CHANGELOG) {
                     Spacer(Modifier.height(8.dp))
-                    Text(
-                        "Changelog",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        style = MaterialTheme.typography.bodySmall,
-                        fontWeight = FontWeight.Normal,
+                    Row(
                         modifier = Modifier.fillMaxWidth().clickable(onClick = onOpenChangelog).padding(vertical = 4.dp),
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                    )
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Image(
+                            painter = painterResource(id = R.drawable.ic_changelog),
+                            contentDescription = null,
+                            modifier = Modifier.size(14.dp),
+                            colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(MaterialTheme.colorScheme.onSurfaceVariant)
+                        )
+                        Spacer(Modifier.width(5.dp))
+                        Text(
+                            "Changelog",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.Normal
+                        )
+                    }
                 }
             }
         },
@@ -2903,6 +2998,17 @@ private fun AboutDialog(darkTheme: Boolean, onDismiss: () -> Unit, onOpenChangel
 @Composable
 private fun ChangelogScreen() {
     val entries = listOf(
+        "3.43.9" to listOf(
+            "New" to listOf(
+                "Added a separate Dark theme with charcoal and dark-gray surfaces alongside Light and AMOLED."
+            ),
+            "Improvements" to listOf(
+                "Improved small-widget reminder titles by placing the first word on line one and the remaining title on line two, with truncation based on the widget text width.",
+                "Updated the large Year Progress widget countdown to spell out “minutes” and place the minutes remaining on a second line.",
+                "Added a small history icon beside Changelog in the About section.",
+                "Updated Bitcoin support wording from “Donate” to “Support.”"
+            )
+        ),
         "3.43.8" to listOf(
             "Fixes" to listOf(
                 "Integrated Value Tracker calculations with the existing History section and Calendar history system."
