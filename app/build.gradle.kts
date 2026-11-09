@@ -30,8 +30,8 @@ android {
         applicationId = "com.daycalculator.dynamic.app"
         minSdk = 24
         targetSdk = 36
-        versionCode = 81
-        versionName = "3.43.9"
+        versionCode = 82
+        versionName = "3.44.0"
     }
 
     flavorDimensions += "distribution"

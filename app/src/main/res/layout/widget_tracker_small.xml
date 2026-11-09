@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/tracker_widget_root" android:layout_width="match_parent" android:layout_height="match_parent"
+    android:padding="12dp" android:background="#F5F5F5">
+    <LinearLayout android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:gravity="center_vertical">
+        <TextView android:id="@+id/tracker_widget_name" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Tracker" android:textSize="13sp" android:textStyle="bold" android:maxLines="1" android:ellipsize="end" android:textColor="#111111" />
+        <TextView android:id="@+id/tracker_widget_value" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="0" android:textSize="22sp" android:textStyle="bold" android:maxLines="1" android:ellipsize="end" android:textColor="#111111" android:layout_marginTop="3dp" />
+        <TextView android:id="@+id/tracker_widget_subtitle" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Projected value today" android:textSize="11sp" android:maxLines="1" android:ellipsize="end" android:textColor="#555555" android:layout_marginTop="2dp" />
+        <LinearLayout android:id="@+id/tracker_widget_value_progress_group" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:layout_marginTop="7dp">
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical">
+                <TextView android:id="@+id/tracker_widget_target" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="Target" android:textSize="10sp" android:textColor="#555555" android:maxLines="1" android:ellipsize="end" />
+                <TextView android:id="@+id/tracker_widget_value_progress_label" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="0%" android:textSize="10sp" android:textStyle="bold" android:textColor="#555555" />
+            </LinearLayout>
+            <ProgressBar android:id="@+id/tracker_widget_value_progress" style="?android:attr/progressBarStyleHorizontal" android:layout_width="match_parent" android:layout_height="7dp" android:max="100" android:progress="0" android:progressTint="#69D38A" android:progressBackgroundTint="#555555" android:layout_marginTop="4dp" />
+            <TextView android:id="@+id/tracker_widget_remaining" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="0 remaining" android:textSize="10sp" android:textColor="#777777" android:layout_marginTop="3dp" android:maxLines="1" android:ellipsize="end" />
+        </LinearLayout>
+        <LinearLayout android:id="@+id/tracker_widget_time_progress_group" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:layout_marginTop="7dp" android:visibility="gone">
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical">
+                <TextView android:id="@+id/tracker_widget_time_progress_label" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="Time progress" android:textSize="10sp" android:textColor="#555555" android:maxLines="1" android:ellipsize="end" />
+                <TextView android:id="@+id/tracker_widget_time_progress_percent" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="0%" android:textSize="10sp" android:textStyle="bold" android:textColor="#555555" />
+            </LinearLayout>
+            <ProgressBar android:id="@+id/tracker_widget_time_progress" style="?android:attr/progressBarStyleHorizontal" android:layout_width="match_parent" android:layout_height="7dp" android:max="100" android:progress="0" android:progressTint="#64A8FF" android:progressBackgroundTint="#555555" android:layout_marginTop="4dp" />
+            <TextView android:id="@+id/tracker_widget_dates" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="" android:textSize="10sp" android:textColor="#777777" android:layout_marginTop="3dp" android:maxLines="1" android:ellipsize="end" />
+        </LinearLayout>
+        <TextView android:id="@+id/tracker_widget_extra" android:layout_width="0dp" android:layout_height="0dp" android:visibility="gone" />
+    </LinearLayout>
+    <ImageView android:id="@+id/tracker_widget_ring" android:layout_width="1dp" android:layout_height="1dp" android:visibility="gone" android:contentDescription="Tracker progress" />
+</FrameLayout>

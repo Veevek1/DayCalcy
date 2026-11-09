@@ -17,6 +17,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -33,6 +34,7 @@ import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.material3.*
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -43,6 +45,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.window.DialogWindowProvider
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
@@ -51,6 +55,7 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import kotlin.math.roundToInt
 import java.time.DateTimeException
 import java.time.DayOfWeek
 import java.time.Instant
@@ -71,7 +76,9 @@ import androidx.compose.ui.graphics.ColorFilter
 
 class MainActivity : ComponentActivity() {
     private var openReminderRequest by mutableStateOf(false)
+    private var openTrackersRequest by mutableStateOf(false)
     private var widgetConfigId: Int = AppWidgetManager.INVALID_APPWIDGET_ID
+    private var configuringTrackerWidget: Boolean = false
     private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { }
@@ -88,9 +95,11 @@ class MainActivity : ComponentActivity() {
             setResult(RESULT_CANCELED, Intent().putExtra(
                 AppWidgetManager.EXTRA_APPWIDGET_ID, widgetConfigId
             ))
+            configuringTrackerWidget = isTrackerWidget(widgetConfigId, intent)
             setContent {
                 WidgetReminderChooser(
                     appWidgetId = widgetConfigId,
+                    isTrackerWidget = configuringTrackerWidget,
                     onDone = { finish() },
                     onCancel = { finish() }
                 )
@@ -102,12 +111,16 @@ class MainActivity : ComponentActivity() {
         ReminderScheduler.rescheduleAll(this)
         ReminderScheduler.scheduleYearProgressNotifications(this)
         DateReminderWidget.updateAll(this)
+        TrackerWidgetProvider.updateAll(this)
         openReminderRequest = intent.getBooleanExtra(EXTRA_OPEN_REMINDER, false) ||
             intent.getBooleanExtra(EXTRA_OPEN_YEAR_PROGRESS, false)
+        openTrackersRequest = intent.getBooleanExtra(EXTRA_OPEN_TRACKERS, false)
         setContent {
             DayCalculatorApp(
                 openReminder = openReminderRequest,
-                onOpenReminderHandled = { openReminderRequest = false }
+                onOpenReminderHandled = { openReminderRequest = false },
+                openTrackers = openTrackersRequest,
+                onOpenTrackersHandled = { openTrackersRequest = false }
             )
         }
     }
@@ -121,9 +134,11 @@ class MainActivity : ComponentActivity() {
             setResult(RESULT_CANCELED, Intent().putExtra(
                 AppWidgetManager.EXTRA_APPWIDGET_ID, widgetConfigId
             ))
+            configuringTrackerWidget = isTrackerWidget(widgetConfigId, intent)
             setContent {
                 WidgetReminderChooser(
                     appWidgetId = widgetConfigId,
+                    isTrackerWidget = configuringTrackerWidget,
                     onDone = { finish() },
                     onCancel = { finish() }
                 )
@@ -135,6 +150,20 @@ class MainActivity : ComponentActivity() {
         ) {
             openReminderRequest = true
         }
+        if (intent.getBooleanExtra(EXTRA_OPEN_TRACKERS, false)) {
+            openTrackersRequest = true
+        }
+    }
+
+    companion object {
+        const val EXTRA_OPEN_TRACKERS = "daycalcy_open_trackers"
+    }
+
+    private fun isTrackerWidget(widgetId: Int, intent: Intent?): Boolean {
+        if (intent?.getBooleanExtra("daycalcy_configure_tracker_widget", false) == true) return true
+        val info = runCatching { AppWidgetManager.getInstance(this).getAppWidgetInfo(widgetId) }.getOrNull()
+        return info?.provider?.className == TrackerWidgetSmall::class.java.name ||
+            info?.provider?.className == TrackerWidgetLarge::class.java.name
     }
 
     private fun widgetConfigIdFrom(intent: Intent?): Int {
@@ -218,7 +247,7 @@ private val LocalCalculatorStatePersistenceEnabled = compositionLocalOf { true }
 enum class ThemeMode { SYSTEM, LIGHT, DARK, AMOLED }
 
 enum class MainTab(val label: String) {
-    AGE("Age"), DIFFERENCE("Date Difference"), ADD_SUBTRACT("Add / Subtract"), COUNTER("Day Counter"), WEEKDAY("Day of Week"), VALUE_TRACKER("Value Tracker"), REMINDER("Date Reminder"), DURATION("Duration Calculator"), CALENDAR("Calendar"), HISTORY("History"), CHANGELOG("Changelog")
+    AGE("Age"), DIFFERENCE("Date Difference"), ADD_SUBTRACT("Add / Subtract"), COUNTER("Day Counter"), WEEKDAY("Day of Week"), VALUE_TRACKER("Value Tracker"), REMINDER("Date Reminder"), DURATION("Duration Calculator"), CALENDAR("Calendar"), HISTORY("History"), TRACKERS("Saved Trackers"), CHANGELOG("Changelog")
 }
 
 data class DateParts(val day: Int?, val month: Int?, val year: Int?)
@@ -307,6 +336,43 @@ private object HistoryStore {
             })
         }
         context.getSharedPreferences(HISTORY_PREFS, Context.MODE_PRIVATE).edit().putString(HISTORY_KEY, array.toString()).apply()
+    }
+}
+
+data class SavedTracker(
+    val id: Long,
+    val name: String,
+    val summary: String,
+    val details: String,
+    val payload: String,
+    val createdAt: Long
+)
+
+private object TrackerStore {
+    private const val PREFS = "daycalcy_saved_trackers"
+    private const val KEY = "items"
+
+    fun load(context: Context): List<SavedTracker> = runCatching {
+        val array = JSONArray(context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY, "[]") ?: "[]")
+        buildList { for (i in 0 until array.length()) {
+            val o = array.optJSONObject(i) ?: continue
+            add(SavedTracker(o.optLong("id"), o.optString("name"), o.optString("summary"), o.optString("details"), o.optString("payload"), o.optLong("createdAt")))
+        } }
+    }.getOrDefault(emptyList())
+
+    fun save(context: Context, tracker: SavedTracker) {
+        val items = listOf(tracker) + load(context).filterNot { it.id == tracker.id }
+        val array = JSONArray()
+        items.forEach { t -> array.put(JSONObject().put("id", t.id).put("name", t.name).put("summary", t.summary).put("details", t.details).put("payload", t.payload).put("createdAt", t.createdAt)) }
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY, array.toString()).apply()
+        TrackerWidgetProvider.updateAll(context)
+    }
+
+    fun delete(context: Context, id: Long) {
+        val array = JSONArray()
+        load(context).filterNot { it.id == id }.forEach { t -> array.put(JSONObject().put("id", t.id).put("name", t.name).put("summary", t.summary).put("details", t.details).put("payload", t.payload).put("createdAt", t.createdAt)) }
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY, array.toString()).apply()
+        TrackerWidgetProvider.updateAll(context)
     }
 }
 
@@ -430,7 +496,7 @@ private fun loadThemeMode(context: Context): ThemeMode {
         val migratedLegacyPureDark = stored == "DARK"
         if (migratedLegacyPureDark) prefs.edit().putString(THEME_KEY, ThemeMode.AMOLED.name).apply()
         prefs.edit().putBoolean(THEME_MIGRATION_3439_KEY, true).apply()
-        if (migratedLegacyPureDark) DateReminderWidget.updateAll(context)
+        if (migratedLegacyPureDark) { DateReminderWidget.updateAll(context); TrackerWidgetProvider.updateAll(context) }
         return if (migratedLegacyPureDark) ThemeMode.AMOLED else when (stored) {
             ThemeMode.LIGHT.name -> ThemeMode.LIGHT
             ThemeMode.AMOLED.name -> ThemeMode.AMOLED
@@ -471,6 +537,7 @@ private fun saveThemeMode(context: Context, mode: ThemeMode) {
     }
     editor.apply()
     DateReminderWidget.updateAll(context)
+    TrackerWidgetProvider.updateAll(context)
 }
 
 private fun loadHolidays(context: Context): List<Holiday> {
@@ -495,6 +562,7 @@ private fun saveHolidays(context: Context, holidays: List<Holiday>) {
 @Composable
 private fun WidgetReminderChooser(
     appWidgetId: Int,
+    isTrackerWidget: Boolean = false,
     onDone: () -> Unit,
     onCancel: () -> Unit
 ) {
@@ -502,10 +570,14 @@ private fun WidgetReminderChooser(
     val themeMode = remember { mutableStateOf(loadThemeMode(context)) }
     val effectiveThemeMode = resolveEffectiveThemeMode(context, themeMode.value, isSystemInDarkTheme())
     val dark = effectiveThemeMode != ThemeMode.LIGHT
+    var selectedType by remember {
+        mutableStateOf(if (isTrackerWidget) "TRACKER" else DateReminderWidget.selectedContentType(context, appWidgetId))
+    }
     var selectedId by remember {
-        mutableStateOf(DateReminderWidget.selectedReminderId(context, appWidgetId))
+        mutableStateOf(if (selectedType == "TRACKER") TrackerWidgetData.selected(context, appWidgetId).takeIf { it >= 0L }?.toString() else DateReminderWidget.selectedReminderId(context, appWidgetId))
     }
     val reminders = remember { ReminderStore.load(context) }
+    val trackers = remember { TrackerStore.load(context) }
     val yearProgressEnabled = remember { mutableStateOf(DateReminderWidget.isYearProgressEnabled(context)) }
 
     MaterialTheme(
@@ -551,7 +623,7 @@ private fun WidgetReminderChooser(
             containerColor = MaterialTheme.colorScheme.background,
             topBar = {
                 TopAppBar(
-                    title = { Text("Choose reminder") },
+                    title = { Text(if (selectedType == "TRACKER") "Choose tracker" else "Choose reminder") },
                     navigationIcon = {
                         IconButton(onClick = onCancel) { Text("✕") }
                     },
@@ -560,12 +632,13 @@ private fun WidgetReminderChooser(
                             enabled = selectedId != null,
                             onClick = {
                                 val id = selectedId ?: return@TextButton
-                                DateReminderWidget.setSelectedReminder(context, appWidgetId, id)
-                                DateReminderWidget.updateAppWidget(
-                                    context,
-                                    AppWidgetManager.getInstance(context),
-                                    appWidgetId
-                                )
+                                DateReminderWidget.setSelectedContentType(context, appWidgetId, selectedType)
+                                if (selectedType == "TRACKER") {
+                                    TrackerWidgetData.select(context, appWidgetId, id.toLong())
+                                } else {
+                                    DateReminderWidget.setSelectedReminder(context, appWidgetId, id)
+                                }
+                                DateReminderWidget.updateAppWidget(context, AppWidgetManager.getInstance(context), appWidgetId)
                                 val result = Intent().putExtra(
                                     AppWidgetManager.EXTRA_APPWIDGET_ID,
                                     appWidgetId
@@ -584,29 +657,62 @@ private fun WidgetReminderChooser(
                     .padding(padding)
                     .padding(horizontal = 16.dp, vertical = 12.dp)
             ) {
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                    listOf("REMINDER" to "Reminder", "TRACKER" to "Tracker").forEach { (type, label) ->
+                        Surface(
+                            modifier = Modifier.weight(1f).clip(RoundedCornerShape(12.dp)).clickable {
+                                selectedType = type
+                                selectedId = if (type == "TRACKER") TrackerWidgetData.selected(context, appWidgetId).takeIf { it >= 0L }?.toString()
+                                    else DateReminderWidget.selectedReminderId(context, appWidgetId)
+                            },
+                            shape = RoundedCornerShape(12.dp),
+                            color = if (selectedType == type) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceVariant
+                        ) {
+                            Text(label, modifier = Modifier.padding(vertical = 12.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center, style = MaterialTheme.typography.titleMedium)
+                        }
+                    }
+                }
+                Spacer(Modifier.height(12.dp))
                 Text(
-                    "Select which reminder this widget should display.",
+                    if (selectedType == "TRACKER") "Select which saved tracker this widget should display." else "Select which reminder this widget should display.",
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Spacer(Modifier.height(16.dp))
-                if (reminders.isEmpty() && !yearProgressEnabled.value) {
+                if (selectedType == "TRACKER" && trackers.isEmpty()) {
+                    Text("No saved trackers yet. Open DayCalcy, save a Value Tracker, then add this widget.", style = MaterialTheme.typography.bodyLarge)
+                } else if (selectedType != "TRACKER" && reminders.isEmpty() && !yearProgressEnabled.value) {
                     Text(
                         "No reminders saved yet. Open DayCalcy and add a reminder first.",
                         style = MaterialTheme.typography.bodyLarge
                     )
                 } else {
                     LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        if (yearProgressEnabled.value) {
+                        if (selectedType == "TRACKER") {
+                            items(trackers, key = { "tracker-${it.id}" }) { tracker ->
+                                val checked = selectedId == tracker.id.toString()
+                                Surface(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable { selectedId = tracker.id.toString() }, shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
+                                    Row(Modifier.padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                        RadioButton(selected = checked, onClick = { selectedId = tracker.id.toString() })
+                                        Spacer(Modifier.width(8.dp))
+                                        Column(Modifier.weight(1f)) {
+                                            Text(tracker.name, style = MaterialTheme.typography.titleMedium)
+                                            Text(tracker.summary, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        if (selectedType != "TRACKER" && yearProgressEnabled.value) {
                             item(key = DateReminderWidget.YEAR_PROGRESS_ID) {
                                 val checked = selectedId == DateReminderWidget.YEAR_PROGRESS_ID
                                 Surface(
                                     modifier = Modifier
                                         .fillMaxWidth()
+                                        .clip(RoundedCornerShape(12.dp))
                                         .clickable { selectedId = DateReminderWidget.YEAR_PROGRESS_ID },
                                     shape = RoundedCornerShape(12.dp),
-                                    color = MaterialTheme.colorScheme.surfaceVariant,
-                                    tonalElevation = 1.dp
+                                    color = MaterialTheme.colorScheme.surfaceVariant
                                 ) {
                                     Row(
                                         Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
@@ -629,15 +735,15 @@ private fun WidgetReminderChooser(
                                 }
                             }
                         }
-                        items(reminders, key = { it.id }) { reminder ->
+                        if (selectedType != "TRACKER") items(reminders, key = { it.id }) { reminder ->
                             val checked = reminder.id == selectedId
                             Surface(
                                 modifier = Modifier
                                     .fillMaxWidth()
+                                    .clip(RoundedCornerShape(12.dp))
                                     .clickable { selectedId = reminder.id },
                                 shape = RoundedCornerShape(12.dp),
-                                color = MaterialTheme.colorScheme.surfaceVariant,
-                                tonalElevation = 1.dp
+                                color = MaterialTheme.colorScheme.surfaceVariant
                             ) {
                                 Row(
                                     Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
@@ -673,7 +779,9 @@ private fun WidgetReminderChooser(
 @Composable
 fun DayCalculatorApp(
     openReminder: Boolean = false,
-    onOpenReminderHandled: () -> Unit = {}
+    onOpenReminderHandled: () -> Unit = {},
+    openTrackers: Boolean = false,
+    onOpenTrackersHandled: () -> Unit = {}
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     var themeMode by remember { mutableStateOf(loadThemeMode(context)) }
@@ -681,9 +789,11 @@ fun DayCalculatorApp(
     var holidays by remember { mutableStateOf(loadHolidays(context)) }
     var showHolidaySettings by rememberSaveable { mutableStateOf(false) }
     var showAbout by rememberSaveable { mutableStateOf(false) }
+    var returnToAboutFromChangelog by rememberSaveable { mutableStateOf(false) }
     var menuExpanded by rememberSaveable { mutableStateOf(false) }
     var darkVariantRefresh by rememberSaveable { mutableStateOf(0) }
     var historyEntry by rememberSaveable(stateSaver = HistoryEntrySaver) { mutableStateOf<HistoryEntry?>(null) }
+    var creatingTracker by rememberSaveable { mutableStateOf(false) }
     var returnTool by rememberSaveable { mutableStateOf<MainTab?>(null) }
     var calendarReminderId by rememberSaveable { mutableStateOf<String?>(null) }
     var calendarMonth by rememberSaveable(stateSaver = LocalDateSaver) { mutableStateOf(LocalDate.now().withDayOfMonth(1)) }
@@ -721,9 +831,23 @@ fun DayCalculatorApp(
             onOpenReminderHandled()
         }
     }
+    LaunchedEffect(openTrackers) {
+        if (openTrackers) {
+            toolScrollStates[MainTab.TRACKERS] = ScrollState(0)
+            historyEntry = null
+            returnTool = null
+            selectedTool = MainTab.TRACKERS
+            onOpenTrackersHandled()
+        }
+    }
 
     fun navigateBack() {
-        if (returnTool != null) {
+        if (selectedTool == MainTab.CHANGELOG && returnToAboutFromChangelog) {
+            selectedTool = null
+            historyEntry = null
+            returnToAboutFromChangelog = false
+            showAbout = true
+        } else if (returnTool != null) {
             selectedTool = returnTool
             returnTool = null
             historyEntry = null
@@ -804,6 +928,49 @@ fun DayCalculatorApp(
                         )
                     },
                     actions = {
+                        if (selectedTool == MainTab.VALUE_TRACKER) {
+                            IconButton(
+                                onClick = {
+                                    menuExpanded = false
+                                    historyEntry = null
+                                    creatingTracker = false
+                                    returnTool = MainTab.VALUE_TRACKER
+                                    toolScrollStates[MainTab.TRACKERS] = ScrollState(0)
+                                    selectedTool = MainTab.TRACKERS
+                                },
+                                modifier = Modifier.size(48.dp).semantics {
+                                    contentDescription = "Saved Trackers"
+                                }
+                            ) {
+                                // A simple, theme-aware saved-list icon matching the app bar.
+                                val savedTrackersIconColor = MaterialTheme.colorScheme.onSurface
+                                androidx.compose.foundation.Canvas(modifier = Modifier.size(22.dp)) {
+                                    val iconColor = savedTrackersIconColor
+                                    val stroke = 1.8.dp.toPx()
+                                    val left = size.width * 0.18f
+                                    val right = size.width * 0.82f
+                                    val top = size.height * 0.14f
+                                    val bottom = size.height * 0.86f
+                                    drawRoundRect(
+                                        color = iconColor,
+                                        topLeft = androidx.compose.ui.geometry.Offset(left, top),
+                                        size = androidx.compose.ui.geometry.Size(right - left, bottom - top),
+                                        cornerRadius = androidx.compose.ui.geometry.CornerRadius(2.dp.toPx()),
+                                        style = androidx.compose.ui.graphics.drawscope.Stroke(width = stroke)
+                                    )
+                                    for (line in 0..2) {
+                                        val y = size.height * (0.36f + line * 0.17f)
+                                        drawLine(
+                                            color = iconColor,
+                                            start = androidx.compose.ui.geometry.Offset(size.width * 0.32f, y),
+                                            end = androidx.compose.ui.geometry.Offset(size.width * 0.69f, y),
+                                            strokeWidth = stroke,
+                                            cap = androidx.compose.ui.graphics.StrokeCap.Round
+                                        )
+                                    }
+                                }
+                            }
+                        }
                         Box {
                             IconButton(
                                 onClick = { menuExpanded = true },
@@ -897,6 +1064,7 @@ fun DayCalculatorApp(
                                                 saveThemeMode(context, nextVariant)
                                             } else {
                                                 DateReminderWidget.updateAll(context)
+                                                TrackerWidgetProvider.updateAll(context)
                                             }
                                         },
                                         modifier = Modifier.size(40.dp)
@@ -942,7 +1110,23 @@ fun DayCalculatorApp(
                         MainTab.AGE -> AgeScreen(historyEntry)
                         MainTab.DIFFERENCE -> DateDifferenceScreen(holidays, { showHolidaySettings = true }, historyEntry)
                         MainTab.ADD_SUBTRACT -> AddSubtractScreen(holidays, { showHolidaySettings = true }, historyEntry)
-                        MainTab.VALUE_TRACKER -> ValueTrackerScreen(historyEntry)
+                        MainTab.VALUE_TRACKER -> ValueTrackerScreen(
+                            historyEntry = historyEntry,
+                            isTrackerEditor = historyEntry?.let { entry -> TrackerStore.load(context).any { it.id == entry.id } } == true,
+                            onOpenSavedTrackers = {
+                                historyEntry = null
+                                creatingTracker = false
+                                toolScrollStates[MainTab.TRACKERS] = ScrollState(0)
+                                selectedTool = MainTab.TRACKERS
+                            },
+                            onTrackerSaved = {
+                                historyEntry = null
+                                creatingTracker = false
+                                returnTool = null
+                                toolScrollStates[MainTab.TRACKERS] = ScrollState(0)
+                                selectedTool = MainTab.TRACKERS
+                            }
+                        )
                         MainTab.COUNTER -> DayCounterScreen(holidays, { showHolidaySettings = true }, historyEntry)
                         MainTab.WEEKDAY -> DayOfWeekScreen(historyEntry)
                         MainTab.DURATION -> DurationCalculatorScreen(darkTheme, historyEntry)
@@ -990,6 +1174,22 @@ fun DayCalculatorApp(
                                 }
                             }
                         )
+                        MainTab.TRACKERS -> TrackersScreen(
+                            onCreate = {
+                                historyEntry = null
+                                returnTool = MainTab.TRACKERS
+                                creatingTracker = true
+                                toolScrollStates[MainTab.VALUE_TRACKER] = ScrollState(0)
+                                selectedTool = MainTab.VALUE_TRACKER
+                            },
+                            onOpen = { tracker ->
+                                creatingTracker = false
+                                historyEntry = HistoryEntry(tracker.id, HistoryType.VALUE_TRACKER, tracker.createdAt, tracker.summary, tracker.details, tracker.payload)
+                                returnTool = MainTab.TRACKERS
+                                toolScrollStates[MainTab.VALUE_TRACKER] = ScrollState(0)
+                                selectedTool = MainTab.VALUE_TRACKER
+                            }
+                        )
                         MainTab.HISTORY -> HistoryScreen(onReopen = { entry ->
                             historyEntry = entry
                             returnTool = MainTab.HISTORY
@@ -1025,6 +1225,7 @@ fun DayCalculatorApp(
                 darkTheme = darkTheme,
                 onDismiss = { showAbout = false },
                 onOpenChangelog = {
+                    returnToAboutFromChangelog = true
                     showAbout = false
                     selectedTool = MainTab.CHANGELOG
                 }
@@ -1074,9 +1275,11 @@ private fun HomeScreen(onSelect: (MainTab) -> Unit) {
     BoxWithConstraints(Modifier.fillMaxWidth()) {
         val useTwoColumns = maxWidth >= 400.dp && LocalConfiguration.current.fontScale <= 1.15f
         if (useTwoColumns) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                CompactToolCard("Calendar", "Browse dates", R.drawable.ic_calendar, Modifier.weight(1f)) { onSelect(MainTab.CALENDAR) }
-                CompactToolCard("History", "Your calculations", R.drawable.ic_history, Modifier.weight(1f)) { onSelect(MainTab.HISTORY) }
+            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    CompactToolCard("Calendar", "Browse dates", R.drawable.ic_calendar, Modifier.weight(1f)) { onSelect(MainTab.CALENDAR) }
+                    CompactToolCard("History", "Your calculations", R.drawable.ic_history, Modifier.weight(1f)) { onSelect(MainTab.HISTORY) }
+                }
             }
         } else {
             Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -1706,7 +1909,7 @@ fun DateDifferenceScreen(holidays: List<Holiday>, openSettings: () -> Unit, hist
 }
 
 @Composable
-private fun ValueTrackerScreen(historyEntry: HistoryEntry? = null) {
+private fun ValueTrackerScreen(historyEntry: HistoryEntry? = null, isTrackerEditor: Boolean = false, onOpenSavedTrackers: () -> Unit = {}, onTrackerSaved: () -> Unit = {}) {
     val today = LocalDate.now()
     var start by rememberPersistentState("valueTracker.start", DateInputState.from(today), ::encodeDateInput, ::decodeDateInput)
     var target by rememberPersistentState("valueTracker.target", DateInputState.from(today), ::encodeDateInput, ::decodeDateInput)
@@ -1721,6 +1924,15 @@ private fun ValueTrackerScreen(historyEntry: HistoryEntry? = null) {
     var unit by rememberPersistentState("valueTracker.unit", "", { it }, { it })
     var calculated by rememberPersistentState("valueTracker.calculated", false, { it.toString() }, { it.toBooleanStrictOrNull() ?: false })
     var frequencyMenu by remember { mutableStateOf(false) }
+    var showSaveTracker by remember { mutableStateOf(false) }
+    var showDeleteTrackerConfirm by remember { mutableStateOf(false) }
+    var showAdjustValueDialog by remember { mutableStateOf(false) }
+    var showAdjustmentHistoryDialog by remember { mutableStateOf(false) }
+    var adjustmentAmount by remember { mutableStateOf("") }
+    var adjustmentAdd by remember { mutableStateOf(true) }
+    var trackerName by remember { mutableStateOf("") }
+    var trackerTargetValue by remember { mutableStateOf("") }
+    var savedTrackerTargetDate by remember { mutableStateOf<LocalDate?>(null) }
     val context = androidx.compose.ui.platform.LocalContext.current
 
     LaunchedEffect(historyEntry?.id) {
@@ -1734,13 +1946,14 @@ private fun ValueTrackerScreen(historyEntry: HistoryEntry? = null) {
             frequency = o.optString("frequency", "Daily")
             customDays = o.optString("customDays", "")
             unit = o.optString("unit", "")
+            trackerTargetValue = if (o.isNull("trackerTargetValue")) "" else o.optString("trackerTargetValue", "")
+            savedTrackerTargetDate = runCatching { LocalDate.parse(o.optString("savedTrackerTargetDate")) }.getOrNull()
             calculated = true
         }
     }
 
     Text("Value Tracker", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
     Text("Calculate how a value changes over time.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    Spacer(Modifier.height(14.dp))
     DateSelector("Start Date", start, { start = it; calculated = false }, allowToday = true)
     Spacer(Modifier.height(8.dp))
     DateSelector("Target Date", target, { target = it; calculated = false }, allowToday = true)
@@ -1916,7 +2129,7 @@ private fun ValueTrackerScreen(historyEntry: HistoryEntry? = null) {
                     .put("unit", unit)
                     .toString()
                 LaunchedEffect(calculated) {
-                    if (calculated && historyEntry == null) {
+                    if (calculated && historyEntry == null && !isTrackerEditor) {
                         val id = HistoryStore.nextId(context)
                         HistoryStore.addCalculationUnlessAlreadyLatest(
                             context,
@@ -1926,6 +2139,235 @@ private fun ValueTrackerScreen(historyEntry: HistoryEntry? = null) {
                 }
                 ResultCard("Result", valueText, detail)
                 ResultActions("Value Tracker result: $valueText\n$detail")
+                if (historyEntry == null || isTrackerEditor) {
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedButton(onClick = {
+                        val saved = runCatching { JSONObject(historyEntry?.payload ?: "{}") }.getOrElse { JSONObject() }
+                        val existingSavedTracker = historyEntry?.let { entry -> TrackerStore.load(context).firstOrNull { it.id == entry.id } }
+                        trackerName = saved.optString("trackerName", existingSavedTracker?.name ?: "")
+                        trackerTargetValue = if (saved.isNull("trackerTargetValue")) "" else saved.optString("trackerTargetValue", "")
+                        showSaveTracker = true
+                    }, modifier = Modifier.fillMaxWidth()) {
+                        Text(if (historyEntry?.let { entry -> TrackerStore.load(context).any { it.id == entry.id } } == true) "Update Tracker" else "Save Tracker")
+                    }
+                    if (historyEntry?.let { entry -> TrackerStore.load(context).any { it.id == entry.id } } == true) {
+                        Spacer(Modifier.height(6.dp))
+                        OutlinedButton(
+                            onClick = {
+                                adjustmentAmount = ""
+                                adjustmentAdd = true
+                                showAdjustValueDialog = true
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text("Adjust value") }
+                        val savedTrackerForHistory = TrackerStore.load(context).firstOrNull { it.id == historyEntry.id }
+                        val savedAdjustments = runCatching {
+                            JSONObject(savedTrackerForHistory?.payload ?: "{}").optJSONArray("adjustments") ?: JSONArray()
+                        }.getOrElse { JSONArray() }
+                        if (savedAdjustments.length() > 0) {
+                            TextButton(
+                                onClick = { showAdjustmentHistoryDialog = true },
+                                modifier = Modifier.fillMaxWidth()
+                            ) { Text("Adjustment history (${savedAdjustments.length()})") }
+                        }
+                        TextButton(onClick = { showDeleteTrackerConfirm = true }, modifier = Modifier.fillMaxWidth()) {
+                            Text("Delete Tracker", color = MaterialTheme.colorScheme.error)
+                        }
+                    }
+                }
+                if (showDeleteTrackerConfirm) {
+                    AlertDialog(
+                        onDismissRequest = { showDeleteTrackerConfirm = false },
+                        title = { Text("Delete tracker?") },
+                        text = { Text("This tracker will be removed from Saved Trackers. This cannot be undone.") },
+                        confirmButton = { TextButton(onClick = {
+                            historyEntry?.let { TrackerStore.delete(context, it.id) }
+                            showDeleteTrackerConfirm = false
+                            onTrackerSaved()
+                        }) { Text("Delete") } },
+                        dismissButton = { TextButton(onClick = { showDeleteTrackerConfirm = false }) { Text("Cancel") } }
+                    )
+                }
+                if (showAdjustValueDialog) {
+                    val savedTracker = historyEntry?.let { entry -> TrackerStore.load(context).firstOrNull { it.id == entry.id } }
+                    val snapshot = savedTracker?.let { calculateTrackerSnapshot(it.payload) }
+                    val enteredAmount = adjustmentAmount.toDoubleOrNull()
+                    AlertDialog(
+                        onDismissRequest = { showAdjustValueDialog = false },
+                        title = { Text("Adjust value") },
+                        text = {
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text(
+                                    "Current value: ${snapshot?.formattedValue() ?: "—"}",
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Row(
+                                        Modifier.weight(1f).clickable { adjustmentAdd = true },
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        RadioButton(selected = adjustmentAdd, onClick = { adjustmentAdd = true })
+                                        Text("Increase")
+                                    }
+                                    Row(
+                                        Modifier.weight(1f).clickable { adjustmentAdd = false },
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        RadioButton(selected = !adjustmentAdd, onClick = { adjustmentAdd = false })
+                                        Text("Decrease")
+                                    }
+                                }
+                                OutlinedTextField(
+                                    value = adjustmentAmount,
+                                    onValueChange = { value ->
+                                        adjustmentAmount = value.filter { it.isDigit() || it == '.' }
+                                            .let { filtered -> if (filtered.count { it == '.' } <= 1) filtered else adjustmentAmount }
+                                    },
+                                    label = { Text("Adjustment amount") },
+                                    singleLine = true,
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                                )
+                                Text(
+                                    "This correction will be saved separately and included in future tracker and widget values.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        },
+                        confirmButton = {
+                            TextButton(
+                                onClick = {
+                                    val tracker = savedTracker
+                                    val currentSnapshot = snapshot
+                                    val amountValue = enteredAmount
+                                    if (tracker != null && currentSnapshot != null && amountValue != null &&
+                                        amountValue.isFinite() && amountValue > 0.0
+                                    ) {
+                                        val delta = if (adjustmentAdd) amountValue else -amountValue
+                                        val newValue = currentSnapshot.currentValue + delta
+                                        if (newValue.isFinite()) {
+                                            val payload = JSONObject(tracker.payload)
+                                            val adjustments = payload.optJSONArray("adjustments") ?: JSONArray()
+                                            adjustments.put(
+                                                JSONObject()
+                                                    .put("delta", delta)
+                                                    .put("amount", amountValue)
+                                                    .put("operation", if (adjustmentAdd) "increase" else "decrease")
+                                                    .put("previousValue", currentSnapshot.currentValue)
+                                                    .put("newValue", newValue)
+                                                    .put("timestamp", System.currentTimeMillis())
+                                            )
+                                            payload.put("adjustments", adjustments)
+                                            TrackerStore.save(
+                                                context,
+                                                tracker.copy(
+                                                    summary = formatTrackerNumber(newValue) +
+                                                        if (currentSnapshot.unit.isBlank()) "" else " ${currentSnapshot.unit}",
+                                                    payload = payload.toString()
+                                                )
+                                            )
+                                            showAdjustValueDialog = false
+                                            adjustmentAmount = ""
+                                            onTrackerSaved()
+                                        }
+                                    }
+                                },
+                                enabled = enteredAmount != null && enteredAmount.isFinite() && enteredAmount > 0.0
+                            ) { Text("Save adjustment") }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { showAdjustValueDialog = false }) { Text("Cancel") }
+                        }
+                    )
+                }
+                if (showAdjustmentHistoryDialog) {
+                    val savedTracker = historyEntry?.let { entry -> TrackerStore.load(context).firstOrNull { it.id == entry.id } }
+                    val adjustments = runCatching {
+                        JSONObject(savedTracker?.payload ?: "{}").optJSONArray("adjustments") ?: JSONArray()
+                    }.getOrElse { JSONArray() }
+                    AlertDialog(
+                        onDismissRequest = { showAdjustmentHistoryDialog = false },
+                        title = { Text("Adjustment history") },
+                        text = {
+                            Column(
+                                Modifier.heightIn(max = 320.dp).verticalScroll(rememberScrollState()),
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                for (index in adjustments.length() - 1 downTo 0) {
+                                    val item = adjustments.optJSONObject(index) ?: continue
+                                    val delta = item.optDouble("delta", 0.0)
+                                    val date = java.text.DateFormat.getDateTimeInstance(
+                                        java.text.DateFormat.MEDIUM,
+                                        java.text.DateFormat.SHORT
+                                    ).format(java.util.Date(item.optLong("timestamp")))
+                                    Text(
+                                        "${if (delta >= 0) "+" else "−"}${formatTrackerNumber(kotlin.math.abs(delta))}${if (savedTracker?.let { calculateTrackerSnapshot(it.payload).unit }.orEmpty().isBlank()) "" else " ${calculateTrackerSnapshot(savedTracker!!.payload).unit}"}",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                    Text(date, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text(
+                                        "${formatTrackerNumber(item.optDouble("previousValue", 0.0))} → ${formatTrackerNumber(item.optDouble("newValue", 0.0))}",
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                    if (index > 0) HorizontalDivider()
+                                }
+                            }
+                        },
+                        confirmButton = { TextButton(onClick = { showAdjustmentHistoryDialog = false }) { Text("Close") } }
+                    )
+                }
+                if (showSaveTracker) {
+                    AlertDialog(
+                        onDismissRequest = { showSaveTracker = false },
+                        title = { Text("Save Tracker") },
+                        text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedTextField(value = trackerName, onValueChange = { trackerName = it.take(60) }, label = { Text("Tracker name") }, placeholder = { Text("e.g. Savings") }, singleLine = true)
+                            OutlinedTextField(value = trackerTargetValue, onValueChange = { v -> trackerTargetValue = v.filter { c -> c.isDigit() || c == '.' || c == '-' }.let { if (it.count { c -> c == '.' } <= 1 && it.drop(1).none { c -> c == '-' }) it else trackerTargetValue } }, label = { Text("Target value (optional)") }, placeholder = { Text("Enter your target") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Checkbox(checked = savedTrackerTargetDate != null, onCheckedChange = { enabled ->
+                                    savedTrackerTargetDate = if (enabled) LocalDate.now() else null
+                                })
+                                Text("Set target date (optional)")
+                            }
+                            savedTrackerTargetDate?.let { selectedDate ->
+                                DateSelector(
+                                    "Saved tracker target date",
+                                    DateInputState.from(selectedDate),
+                                    { state -> savedTrackerTargetDate = state.toDate() },
+                                    allowToday = true
+                                )
+                                if (start.toDate()?.let { selectedDate.isBefore(it) } == true) {
+                                    ErrorText("Saved target date must be on or after the start date.")
+                                }
+                            }
+                        } },
+                        confirmButton = { TextButton(onClick = {
+                            val name = trackerName.trim()
+                            if (name.isNotEmpty()) {
+                                val targetNumber = trackerTargetValue.toDoubleOrNull()
+                                if (trackerTargetValue.isNotBlank() && (targetNumber == null || !targetNumber.isFinite())) return@TextButton
+                                val previous = runCatching { JSONObject(historyEntry?.payload ?: "{}") }.getOrElse { JSONObject() }
+                                val existingTrackerId = previous.optLong("trackerId", 0L).takeIf { it > 0L }
+                                    ?: historyEntry?.id?.takeIf { entryId -> TrackerStore.load(context).any { it.id == entryId } }
+                                val id = existingTrackerId ?: HistoryStore.nextId(context)
+                                val savedPayload = JSONObject(historyPayload)
+                                    .put("trackerName", name)
+                                    .put("trackerId", id)
+                                    .put("trackerTargetValue", targetNumber ?: JSONObject.NULL)
+                                    .put("savedTrackerTargetDate", savedTrackerTargetDate?.toString() ?: JSONObject.NULL)
+                                    .put("adjustments", previous.optJSONArray("adjustments") ?: JSONArray())
+                                    .toString()
+                                TrackerStore.save(context, SavedTracker(id, name, valueText, detail, savedPayload, id))
+                                showSaveTracker = false
+                                onTrackerSaved()
+                            }
+                        }, enabled = trackerName.isNotBlank() &&
+                            (trackerTargetValue.isBlank() || trackerTargetValue.toDoubleOrNull()?.isFinite() == true) &&
+                            (savedTrackerTargetDate == null || start.toDate()?.let { !savedTrackerTargetDate!!.isBefore(it) } == true)) { Text("Save") } },
+                        dismissButton = { TextButton(onClick = { showSaveTracker = false }) { Text("Cancel") } }
+                    )
+                }
             }
         }
     }
@@ -2509,7 +2951,7 @@ private fun CalendarScreen(
                 IconButton(onClick = { moveMonth(-1) }) { Text("‹", style = MaterialTheme.typography.headlineMedium) }
                 Text(
                     month.format(DateTimeFormatter.ofPattern("MMMM yyyy", Locale.getDefault())),
-                    modifier = Modifier.weight(1f).clickable {
+                    modifier = Modifier.weight(1f).clip(RoundedCornerShape(12.dp)).clickable {
                         pickerYear = month.year
                         showMonthYearPicker = true
                     },
@@ -2733,6 +3175,181 @@ private fun entryDate(entry: HistoryEntry): LocalDate =
     Instant.ofEpochMilli(entry.timestamp).atZone(ZoneId.systemDefault()).toLocalDate()
 
 @Composable
+private fun TrackerProgressRow(label: String, progress: Float) {
+    val safeProgress = progress.coerceIn(0f, 1f)
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("${(safeProgress * 100).roundToInt()}%", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+    }
+    androidx.compose.material3.LinearProgressIndicator(
+        progress = { safeProgress },
+        modifier = Modifier.fillMaxWidth().height(6.dp),
+        color = MaterialTheme.colorScheme.primary,
+        trackColor = MaterialTheme.colorScheme.outlineVariant,
+        strokeCap = androidx.compose.ui.graphics.StrokeCap.Round
+    )
+}
+
+@Composable
+private fun TrackersScreen(onCreate: () -> Unit, onOpen: (SavedTracker) -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var trackers by remember { mutableStateOf(TrackerStore.load(context)) }
+
+    Text("Saved Trackers", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+    Text("Track your progress over time.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Spacer(Modifier.height(14.dp))
+    Button(onClick = onCreate, modifier = Modifier.fillMaxWidth()) {
+        Text("+")
+        Spacer(Modifier.width(8.dp))
+        Text("Create Tracker")
+    }
+    Spacer(Modifier.height(8.dp))
+    if (trackers.isEmpty()) {
+        Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant), shape = RoundedCornerShape(18.dp)) {
+            Column(Modifier.fillMaxWidth().padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("↗", style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.height(8.dp))
+                Text("No trackers yet", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Text("Create a tracker to see your progress here. You can add it to a widget later.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+    } else {
+        trackers.forEach { tracker ->
+            val snapshot = remember(tracker.id, tracker.payload, LocalDate.now()) { calculateTrackerSnapshot(tracker.payload) }
+            Card(
+                Modifier.fillMaxWidth().padding(vertical = 4.dp).clickable { onOpen(tracker) },
+                shape = RoundedCornerShape(18.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+            ) {
+                Column(
+                    Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(3.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            tracker.name,
+                            modifier = Modifier.weight(1f),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Spacer(Modifier.width(12.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                "Projected value",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                snapshot.formattedValue(),
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+
+                    val dateFormatter = DateTimeFormatter.ofPattern("dd MMM yyyy", Locale.getDefault())
+                    val dateSummary = listOfNotNull(
+                        snapshot.startDate?.let { "Start: ${it.format(dateFormatter)}" },
+                        snapshot.targetDate?.let { "Goal date: ${it.format(dateFormatter)}" }
+                    ).joinToString("  ·  ")
+                    if (dateSummary.isNotBlank()) {
+                        Text(
+                            dateSummary,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    snapshot.targetValue?.let { target ->
+                        Text(
+                            "Goal: ${formatTrackerNumber(target)}${if (snapshot.unit.isBlank()) "" else " ${snapshot.unit}"}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    val valueProgress = snapshot.valueProgress
+                    val timeProgress = snapshot.timeProgress
+                    if (valueProgress != null && timeProgress != null) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalAlignment = Alignment.Top
+                        ) {
+                            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                TrackerProgressRow("Value progress", valueProgress)
+                                snapshot.targetValue?.let { target ->
+                                    val remaining = kotlin.math.abs(target - snapshot.currentValue)
+                                    Text(
+                                        if (snapshot.valueTargetReached) "Value target reached" else "${formatTrackerNumber(remaining)}${if (snapshot.unit.isBlank()) "" else " ${snapshot.unit}"} remaining",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                TrackerProgressRow("Time progress", timeProgress)
+                                snapshot.targetDate?.let { targetDate ->
+                                    Text(
+                                        if (snapshot.dateTargetReached) "Goal date reached" else "Goal date: ${targetDate.format(dateFormatter)}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+                    } else if (valueProgress != null) {
+                        TrackerProgressRow("Value progress", valueProgress)
+                        snapshot.targetValue?.let { target ->
+                            val remaining = kotlin.math.abs(target - snapshot.currentValue)
+                            Text(
+                                if (snapshot.valueTargetReached) "Value target reached" else "${formatTrackerNumber(remaining)}${if (snapshot.unit.isBlank()) "" else " ${snapshot.unit}"} remaining",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    } else if (timeProgress != null) {
+                        TrackerProgressRow("Time progress", timeProgress)
+                        snapshot.targetDate?.let { targetDate ->
+                            Text(
+                                if (snapshot.dateTargetReached) "Goal date reached" else "Goal date: ${targetDate.format(dateFormatter)}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    if (snapshot.startDate != null && snapshot.targetDate?.isBefore(snapshot.startDate) == true) {
+                        Text(
+                            "Invalid goal date: it is before the start date.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+                    Text("Tap to view or edit details", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                }
+            }
+        }
+        // Refresh after returning from tracker editing so changed values appear immediately.
+        LaunchedEffect(Unit) { trackers = TrackerStore.load(context) }
+    }
+}
+
+@Composable
 private fun HistoryScreen(onReopen: (HistoryEntry) -> Unit) {
     val context = androidx.compose.ui.platform.LocalContext.current
     var entries by remember { mutableStateOf(HistoryStore.load(context)) }
@@ -2861,6 +3478,12 @@ fun ResultCard(title: String, main: String, sub: String) {
 @Composable
 private fun AboutDialog(darkTheme: Boolean, onDismiss: () -> Unit, onOpenChangelog: () -> Unit) {
     val context = androidx.compose.ui.platform.LocalContext.current
+    // Keep the About panel, but remove the dark scrim behind it. This also avoids
+    // the same dimmed appearance while launching the Play Store Privacy Policy link.
+    val dialogView = LocalView.current
+    SideEffect {
+        (dialogView.parent as? DialogWindowProvider)?.window?.setDimAmount(0f)
+    }
     val currentYear = LocalDate.now().year
     val versionName = BuildConfig.VERSION_NAME
     val versionCode = BuildConfig.VERSION_CODE
@@ -2938,7 +3561,10 @@ private fun AboutDialog(darkTheme: Boolean, onDismiss: () -> Unit, onOpenChangel
                 Text(
                     "Version: $versionName ($versionCode)",
                     style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.fillMaxWidth().clickable {
+                    modifier = Modifier.fillMaxWidth().clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ) {
                         clipboard.setPrimaryClip(android.content.ClipData.newPlainText("DayCalcy version", "$versionName ($versionCode)"))
                     },
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center
@@ -2946,7 +3572,7 @@ private fun AboutDialog(darkTheme: Boolean, onDismiss: () -> Unit, onOpenChangel
                 Text(
                     "© $currentYear Vivek",
                     style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().clickable { },
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center
                 )
 
@@ -2968,7 +3594,9 @@ private fun AboutDialog(darkTheme: Boolean, onDismiss: () -> Unit, onOpenChangel
                 if (BuildConfig.SHOW_CHANGELOG) {
                     Spacer(Modifier.height(8.dp))
                     Row(
-                        modifier = Modifier.fillMaxWidth().clickable(onClick = onOpenChangelog).padding(vertical = 4.dp),
+                        modifier = Modifier.fillMaxWidth().clickable(
+                            onClick = onOpenChangelog
+                        ).padding(vertical = 4.dp),
                         horizontalArrangement = Arrangement.Center,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -2998,6 +3626,17 @@ private fun AboutDialog(darkTheme: Boolean, onDismiss: () -> Unit, onOpenChangel
 @Composable
 private fun ChangelogScreen() {
     val entries = listOf(
+        "3.44.0" to listOf(
+            "New" to listOf(
+                "Added Saved Trackers to save and manage your calculations.",
+                "Added small and large home-screen widgets for Saved Trackers."
+            ),
+            "Improvements" to listOf(
+                "Improved the appearance and layout of Reminder and Year Progress widgets.",
+                "Improved date and countdown information display.",
+                "And many more changes and improvements!"
+            )
+        ),
         "3.43.9" to listOf(
             "New" to listOf(
                 "Added a separate Dark theme with charcoal and dark-gray surfaces alongside Light and AMOLED."

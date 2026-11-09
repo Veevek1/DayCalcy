@@ -59,6 +59,12 @@ open class DateReminderWidget : AppWidgetProvider() {
     }
 
     override fun onReceive(context: Context, intent: Intent) {
+        if (intent.action == ACTION_REFRESH_TRACKER) {
+            val manager = AppWidgetManager.getInstance(context)
+            val widgetId = intent.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, AppWidgetManager.INVALID_APPWIDGET_ID)
+            if (widgetId != AppWidgetManager.INVALID_APPWIDGET_ID) updateAppWidget(context, manager, widgetId) else updateAll(context)
+            return
+        }
         if (intent.action == ACTION_REFRESH) {
             val manager = AppWidgetManager.getInstance(context)
             val widgetId = intent.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, AppWidgetManager.INVALID_APPWIDGET_ID)
@@ -80,7 +86,7 @@ open class DateReminderWidget : AppWidgetProvider() {
     }
 
     override fun onDeleted(context: Context, appWidgetIds: IntArray) {
-        appWidgetIds.forEach { clearSelectedReminder(context, it) }
+        appWidgetIds.forEach { clearSelectedReminder(context, it); setSelectedContentType(context, it, "REMINDER"); TrackerWidgetData.clear(context, it) }
         super.onDeleted(context, appWidgetIds)
     }
 
@@ -97,6 +103,7 @@ open class DateReminderWidget : AppWidgetProvider() {
         private const val YEAR_PROGRESS_PREFS = "date_reminder_settings"
         private const val YEAR_PROGRESS_ENABLED_KEY = "year_progress_enabled"
         private const val ACTION_REFRESH = "com.daycalculator.dynamic.app.WIDGET_REFRESH"
+        private const val ACTION_REFRESH_TRACKER = "com.daycalculator.dynamic.app.TRACKER_WIDGET_REFRESH"
         private const val ACTION_MINUTE_REFRESH = "com.daycalculator.dynamic.app.WIDGET_MINUTE_REFRESH"
         private const val REFRESH_REQUEST_CODE = 73117
         private const val MINUTE_REFRESH_REQUEST_CODE = 73118
@@ -128,6 +135,18 @@ open class DateReminderWidget : AppWidgetProvider() {
             }
 
             updateAll(context)
+        }
+
+        private const val KEY_TYPE_PREFIX = "type_"
+
+        fun selectedContentType(context: Context, appWidgetId: Int): String =
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .getString(KEY_TYPE_PREFIX + appWidgetId, "REMINDER") ?: "REMINDER"
+
+        fun setSelectedContentType(context: Context, appWidgetId: Int, type: String) {
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+                .putString(KEY_TYPE_PREFIX + appWidgetId, if (type == "TRACKER") "TRACKER" else "REMINDER")
+                .apply()
         }
 
         fun selectedReminderId(context: Context, appWidgetId: Int): String? =
@@ -283,8 +302,9 @@ open class DateReminderWidget : AppWidgetProvider() {
 
         private fun currentDateTimeText(now: LocalDateTime): String {
             val datePart = now.toLocalDate().format(dateFormatter)
+            val dayPart = weekdayText(now.toLocalDate())
             val timePart = now.format(DateTimeFormatter.ofPattern("h:mm a", Locale.getDefault()))
-            return "$datePart · $timePart"
+            return "$datePart · $dayPart · $timePart"
         }
 
         private fun widgetDateText(
@@ -297,12 +317,14 @@ open class DateReminderWidget : AppWidgetProvider() {
             val timeFormatter = DateTimeFormatter.ofPattern("h:mm a", Locale.getDefault())
             return when {
                 diffMinutes >= 0L && diffMinutes < 24L * 60L && target.toLocalDate().isEqual(now.toLocalDate()) ->
-                    "Today · ${reminder.time.format(timeFormatter)}"
+                    if (wide) "Today · ${weekdayText(target.toLocalDate())} · ${reminder.time.format(timeFormatter)}"
+                    else "Today · ${reminder.time.format(timeFormatter)}"
                 diffMinutes >= 24L * 60L && diffMinutes < 48L * 60L && target.toLocalDate().isEqual(now.toLocalDate().plusDays(1)) ->
-                    "Tomorrow · ${reminder.time.format(timeFormatter)}"
+                    if (wide) "Tomorrow · ${weekdayText(target.toLocalDate())} · ${reminder.time.format(timeFormatter)}"
+                    else "Tomorrow · ${reminder.time.format(timeFormatter)}"
                 else -> {
                     if (wide) {
-                        "${target.toLocalDate().format(dateFormatter)} · ${reminder.time.format(timeFormatter)}"
+                        "${target.toLocalDate().format(dateFormatter)} · ${weekdayText(target.toLocalDate())} · ${reminder.time.format(timeFormatter)}"
                     } else {
                         target.toLocalDate().format(dateFormatter)
                     }
@@ -437,11 +459,15 @@ open class DateReminderWidget : AppWidgetProvider() {
             if (period.months != 0) parts += "${period.months} ${if (period.months == 1) "month" else "months"}"
             if (period.days != 0) parts += "${period.days} ${if (period.days == 1) "day" else "days"}"
             if (hours != 0L) parts += "$hours ${if (hours == 1L) "hour" else "hours"}"
+            // Keep the wide widget countdown consistent: the year-ending label
+            // explains the destination, while the two countdown lines contain
+            // only matching time units (hours above minutes), without a one-off
+            // "left" suffix on either line.
             val remainingText = when {
-                minutes > 0L && parts.isNotEmpty() -> parts.joinToString(" · ") + "\n$minutes ${if (minutes == 1L) "minute" else "minutes"} left"
-                minutes > 0L -> "$minutes ${if (minutes == 1L) "minute" else "minutes"} left"
-                parts.isNotEmpty() -> parts.joinToString(" · ") + " left"
-                else -> "0 minutes left"
+                minutes > 0L && parts.isNotEmpty() -> parts.joinToString(" · ") + "\n$minutes ${if (minutes == 1L) "minute" else "minutes"}"
+                minutes > 0L -> "$minutes ${if (minutes == 1L) "minute" else "minutes"}"
+                parts.isNotEmpty() -> parts.joinToString(" · ")
+                else -> "0 minutes"
             }
 
             val shortParts = mutableListOf<String>()
@@ -524,6 +550,10 @@ open class DateReminderWidget : AppWidgetProvider() {
         }
 
         fun updateAppWidget(context: Context, manager: AppWidgetManager, appWidgetId: Int) {
+            if (selectedContentType(context, appWidgetId) == "TRACKER") {
+                TrackerWidgetProvider.updateForExistingWidget(context, manager, appWidgetId)
+                return
+            }
             val layoutId = layoutForSize(context, appWidgetId)
             val views = RemoteViews(context.packageName, layoutId)
             var selectedId = selectedReminderId(context, appWidgetId)
@@ -565,6 +595,11 @@ open class DateReminderWidget : AppWidgetProvider() {
             views.setViewVisibility(R.id.widget_small_days, android.view.View.GONE)
             views.setTextViewText(R.id.widget_small_days, "")
 
+            if (isWide) {
+                views.setViewVisibility(R.id.widget_year_ends_label, android.view.View.GONE)
+                views.setTextViewText(R.id.widget_year_ends_label, "")
+            }
+
             when {
                 isYearProgress -> {
                     val progress = yearProgress()
@@ -583,11 +618,13 @@ open class DateReminderWidget : AppWidgetProvider() {
                     } else if (isWide) {
                         views.setTextViewText(R.id.widget_title, "Year Progress")
                         views.setTextViewText(R.id.widget_date, currentDateTimeText(LocalDateTime.now(ZoneId.systemDefault())))
+                        views.setTextViewText(R.id.widget_year_ends_label, "${progress.year} ends in")
+                        views.setViewVisibility(R.id.widget_year_ends_label, android.view.View.VISIBLE)
                         views.setTextViewText(R.id.widget_countdown, progress.remainingText)
                         views.setTextViewText(R.id.widget_total_days, "${progress.daysPassed} days passed")
                         views.setViewVisibility(R.id.widget_total_days, android.view.View.VISIBLE)
-                        views.setTextViewText(R.id.widget_weekday, weekdayText(LocalDate.now(ZoneId.systemDefault())))
-                        views.setViewVisibility(R.id.widget_weekday, android.view.View.VISIBLE)
+                        views.setTextViewText(R.id.widget_weekday, "")
+                        views.setViewVisibility(R.id.widget_weekday, android.view.View.GONE)
                     }
                 }
                 reminder == null && selectedId == null -> {
@@ -616,16 +653,11 @@ open class DateReminderWidget : AppWidgetProvider() {
                     views.setViewVisibility(R.id.widget_label, android.view.View.GONE)
                     views.setTextViewText(R.id.widget_label, "")
                     val displayTitle = if (isSmall) {
-                        // Keep the first word as a clear heading and place the rest
-                        // on line two. Let the TextView's real width, maxLines=2,
-                        // and ellipsize handle long names naturally instead of
-                        // truncating after a fixed number of words.
-                        val words = reminder.title.trim().split(Regex("\\s+")).filter { it.isNotBlank() }
-                        when {
-                            words.isEmpty() -> reminder.title.trim()
-                            words.size == 1 -> words[0]
-                            else -> "${words.first()}\n${words.drop(1).joinToString(" ")}"
-                        }
+                        // Let TextView wrap the complete reminder title naturally
+                        // within the actual widget width. Words stay on the first
+                        // line whenever they fit; overflow moves to line two, where
+                        // the XML end-ellipsis handles any remaining text.
+                        reminder.title.trim()
                     } else reminder.title
                     views.setTextViewText(R.id.widget_title, displayTitle)
                     val now = LocalDateTime.now(ZoneId.systemDefault())
@@ -651,8 +683,8 @@ open class DateReminderWidget : AppWidgetProvider() {
                         views.setViewVisibility(R.id.widget_total_days, android.view.View.GONE)
                     }
                     if (isWide) {
-                        views.setTextViewText(R.id.widget_weekday, weekdayText(reminderTarget(reminder, LocalDateTime.now()).toLocalDate()))
-                        views.setViewVisibility(R.id.widget_weekday, android.view.View.VISIBLE)
+                        views.setTextViewText(R.id.widget_weekday, "")
+                        views.setViewVisibility(R.id.widget_weekday, android.view.View.GONE)
                     } else {
                         views.setTextViewText(R.id.widget_weekday, "")
                     }

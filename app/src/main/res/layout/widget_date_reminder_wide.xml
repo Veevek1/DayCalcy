@@ -10,9 +10,10 @@
     <LinearLayout
         android:id="@+id/widget_content"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_gravity="top|start"
+        android:layout_height="match_parent"
+        android:layout_gravity="center_vertical"
         android:layout_marginEnd="52dp"
+        android:gravity="center_vertical"
         android:orientation="vertical">
 
         <TextView
@@ -27,12 +28,13 @@
             android:layout_height="wrap_content"
             android:ellipsize="end"
             android:maxLines="1"
-            android:text="My birthday"
+            android:text="Choose a reminder"
             android:textColor="@color/widget_text"
             android:textSize="16sp"
             android:textStyle="bold"
             android:fontFamily="sans-serif"
-            android:includeFontPadding="false" />
+            android:includeFontPadding="false" android:gravity="start"
+            />
 
         <TextView
             android:id="@+id/widget_date"
@@ -41,11 +43,24 @@
             android:layout_marginTop="3dp"
             android:ellipsize="end"
             android:maxLines="1"
-            android:text="05 Jun 2027 · 9:00 AM"
+            android:text="Tap this widget to select one"
             android:textColor="@color/widget_secondary"
             android:textSize="10sp"
             android:fontFamily="sans-serif"
-            android:includeFontPadding="false" />
+            android:includeFontPadding="false" android:gravity="start"
+            />
+
+        <TextView
+            android:id="@+id/widget_year_ends_label"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="7dp"
+            android:visibility="gone"
+            android:textColor="@color/widget_secondary"
+            android:textSize="11sp"
+            android:fontFamily="sans-serif"
+            android:includeFontPadding="false" android:gravity="start"
+            />
 
         <TextView
             android:id="@+id/widget_countdown"
@@ -56,13 +71,13 @@
             android:maxLines="2"
             android:breakStrategy="simple"
             android:hyphenationFrequency="none"
-            android:text="8 months · 2 weeks · 4 days
-23 hours · 58 minutes"
+            android:text="Select reminder"
             android:textColor="@color/widget_text"
             android:textSize="14sp"
             android:textStyle="bold"
             android:fontFamily="sans-serif"
-            android:includeFontPadding="false" />
+            android:includeFontPadding="false" android:gravity="start"
+            />
 
         <TextView
             android:id="@+id/widget_total_days"
@@ -71,11 +86,12 @@
             android:layout_marginTop="4dp"
             android:ellipsize="end"
             android:maxLines="1"
-            android:text="259 days"
+            android:text=""
             android:textColor="@color/widget_secondary"
             android:textSize="9sp"
             android:fontFamily="sans-serif"
-            android:includeFontPadding="false" />
+            android:includeFontPadding="false" android:gravity="start"
+            />
 
         <TextView
             android:id="@+id/widget_small_days"
@@ -89,9 +105,10 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="bottom|start"
+        android:visibility="gone"
         android:maxLines="1"
         android:ellipsize="end"
-        android:text="Saturday"
+        android:text=""
         android:textColor="@color/widget_secondary"
         android:textSize="10sp"
         android:fontFamily="sans-serif"

@@ -250,19 +250,14 @@ internal object ReminderScheduler {
     ) {
         val alarm = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         val now = LocalDateTime.now(ZoneId.systemDefault())
-        val target = if (requestedTarget.isAfter(now)) requestedTarget else {
-            if (action == YEAR_END_ACTION) {
-                LocalDateTime.of(LocalDate.of(now.year + 1, 12, 31), LocalTime.of(YEAR_END_HOUR, 0))
-            } else {
-                LocalDateTime.of(LocalDate.of(now.year + 1, 1, 1), LocalTime.of(NEW_YEAR_HOUR, 0))
-            }
-        }
+        val target = if (requestedTarget.isAfter(now)) requestedTarget else requestedTarget.plusYears(1)
         val trigger = target.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
         val pending = PendingIntent.getBroadcast(
             context,
             requestCode,
             Intent(context, DateReminderReceiver::class.java).apply {
                 this.action = action
+                putExtra("completed_year", target.year - 1)
             },
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
@@ -287,24 +282,26 @@ internal object ReminderScheduler {
         }
     }
 
-    fun cancelSpecialAlarms(context: Context) {
+    private fun cancelSpecialAlarm(context: Context, requestCode: Int, action: String) {
         val alarm = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-        listOf(
-            YEAR_END_REQUEST_CODE to YEAR_END_ACTION,
-            NEW_YEAR_REQUEST_CODE to NEW_YEAR_ACTION
-        ).forEach { (code, action) ->
-            val pending = PendingIntent.getBroadcast(
-                context,
-                code,
-                Intent(context, DateReminderReceiver::class.java).apply { this.action = action },
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
-            alarm.cancel(pending)
-            pending.cancel()
-        }
+        val pending = PendingIntent.getBroadcast(
+            context,
+            requestCode,
+            Intent(context, DateReminderReceiver::class.java).apply { this.action = action },
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        alarm.cancel(pending)
+        pending.cancel()
+    }
+
+    fun cancelSpecialAlarms(context: Context) {
+        cancelSpecialAlarm(context, YEAR_END_REQUEST_CODE, YEAR_END_ACTION)
+        cancelSpecialAlarm(context, NEW_YEAR_REQUEST_CODE, NEW_YEAR_ACTION)
     }
 
     fun yearEndMessage(year: Int): String = yearEndMessages[Math.floorMod(year, yearEndMessages.size)]
+    fun yearEndNotificationId(): Int = YEAR_END_NOTIFICATION_ID
+
     fun newYearMessage(year: Int): String = newYearMessages[Math.floorMod(year, newYearMessages.size)]
 
     fun createChannel(context: Context) {
@@ -414,7 +411,8 @@ internal class DateReminderReceiver : BroadcastReceiver() {
                 return
             }
             "com.daycalculator.dynamic.app.YEAR_END" -> {
-                postYearEndNotification(context)
+                val completedYear = intent.getIntExtra("completed_year", LocalDate.now().year - 1)
+                postYearEndNotification(context, completedYear)
                 ReminderScheduler.scheduleYearProgressNotifications(context)
                 return
             }
@@ -543,8 +541,7 @@ internal class DateReminderReceiver : BroadcastReceiver() {
         val message: String?
     )
 
-    private fun postYearEndNotification(context: Context) {
-        val year = LocalDate.now().year
+    private fun postYearEndNotification(context: Context, year: Int) {
         val total = LocalDate.of(year, 1, 1).lengthOfYear()
         val message = ReminderScheduler.yearEndMessage(year)
         val intent = Intent(context, MainActivity::class.java).apply {
@@ -559,15 +556,17 @@ internal class DateReminderReceiver : BroadcastReceiver() {
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle("$year is complete")
             .setContentText("$total / $total days")
-            .setStyle(NotificationCompat.BigTextStyle().bigText("$total / $total days\n$message\nA new year begins tomorrow."))
+            .setStyle(NotificationCompat.BigTextStyle().bigText("$total / $total days\n$message\nWelcome to the new year."))
             .setAutoCancel(true)
             .setContentIntent(pending)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .build()
         if (Build.VERSION.SDK_INT < 33 || NotificationManagerCompat.from(context).areNotificationsEnabled()) {
-            NotificationManagerCompat.from(context).notify(2_100_001, notification)
+            NotificationManagerCompat.from(context).notify(ReminderScheduler.yearEndNotificationId(), notification)
         }
     }
+
+
 
     private fun postNewYearNotification(context: Context) {
         val year = LocalDate.now().year

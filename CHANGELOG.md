@@ -1,5 +1,16 @@
 # Changelog
 
+## 3.44.0
+
+### New
+- Added Saved Trackers to save and manage your calculations.
+- Added small and large home-screen widgets for Saved Trackers.
+
+### Improvements
+- Improved the appearance and layout of Reminder and Year Progress widgets.
+- Improved date and countdown information display.
+- And many more changes and improvements!
+
 ## 3.43.9
 
 ### New
