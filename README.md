@@ -16,7 +16,7 @@ You can calculate someone's exact age, find the difference between two dates, ad
 
 There are also reminders that repeat daily, weekly, monthly, yearly or on a custom schedule, a to-do list with its own resizable widget, and a value tracker where you set a target value and date and follow your progress.
 
-You also get a calendar that shows your reminders, a history of your last calculations, a year progress view, home screen widgets, and light and dark themes.
+You also get a calendar that shows your reminders, a history of your last calculations, a year progress view, home screen countdown widgets, and light and dark themes.
 
 ## Privacy
 
