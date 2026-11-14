@@ -1,1 +1,1 @@
-Simple ofline date calculator with reminder.
+Fully offline date calculator with reminders and to-dos.
