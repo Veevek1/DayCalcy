@@ -14,7 +14,9 @@
 
 You can calculate someone's exact age, find the difference between two dates, add or subtract days, weeks, months or years, count days between dates (optionally skipping weekends and your own holidays), and check which weekday a date falls on.
 
-There are also reminders for one-time or yearly dates, a calendar that shows them, a history of your last calculations, a year progress view, home screen countdown widgets 2x2 and 4x2, and light, dark and system themes.
+There are also reminders that repeat daily, weekly, monthly, yearly or on a custom schedule, a to-do list with its own resizable widget, and a value tracker where you set a target value and date and follow your progress.
+
+You also get a calendar that shows your reminders, a history of your last calculations, a year progress view, home screen widgets, and light and dark themes.
 
 ## Privacy
 
