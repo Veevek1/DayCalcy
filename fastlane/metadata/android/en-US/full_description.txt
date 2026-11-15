@@ -1,9 +1,7 @@
-WHAT IT CAN DO -
-
-You can calculate someone's exact age, find the difference between two dates, add or subtract days, weeks, months or years, count days between dates (optionally skipping weekends and your own holidays), and check which weekday a date falls on.
+Using DayCalcy, you can calculate someone's exact age, find the difference between two dates, add or subtract days, weeks, months or years, count days between dates (optionally skipping weekends and your own holidays), and check which weekday a date falls on.
 
 There are also reminders that repeat daily, weekly, monthly, yearly or on a custom schedule, a to-do list with its own resizable widget, and a value tracker where you set a target value and date and follow your progress.
 
 You also get a calendar that shows your reminders, a history of your last calculations, a year progress view, home screen countdown widgets, and light and dark themes.
 
-DayCalcy works without an internet connection and does not require online services.
+DayCalcy has no internet permission, no ads, no tracking and no analytics. Everything stays on your device.
