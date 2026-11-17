@@ -21,13 +21,55 @@ import java.util.Locale
 import java.time.ZoneId
 import java.util.UUID
 
+internal enum class ReminderRepeat(val menuLabel: String, val everyText: String) {
+    NONE("Never (one-time)", "One-time"),
+    DAILY("Every day", "Every day"),
+    WEEKLY("Every week", "Every week"),
+    MONTHLY("Every month", "Every month"),
+    YEARLY("Every year", "Every year");
+
+    companion object {
+        /** Reads the stored value. Older versions saved a plain true/false for "repeat every year". */
+        fun fromStored(value: String?): ReminderRepeat = when (value) {
+            null, "", "false" -> NONE
+            "true" -> YEARLY
+            else -> entries.firstOrNull { it.name == value } ?: NONE
+        }
+    }
+
+    /** Value written to storage; yearly and one-time keep the old true/false format. */
+    fun toStored(): String = when (this) {
+        NONE -> "false"
+        YEARLY -> "true"
+        else -> name
+    }
+}
+
 internal data class DateReminder(
     val id: String,
     val title: String,
     val date: LocalDate,
     val time: LocalTime = LocalTime.of(9, 0),
-    val repeatsYearly: Boolean = false
-)
+    val repeat: ReminderRepeat = ReminderRepeat.NONE,
+    /** Repeat every N days/weeks/months/years. 1 is the normal daily/weekly/monthly/yearly repeat. */
+    val interval: Int = 1
+) {
+    val repeatsYearly: Boolean get() = repeat == ReminderRepeat.YEARLY
+    val repeats: Boolean get() = repeat != ReminderRepeat.NONE
+    val repeatText: String get() = reminderRepeatText(repeat, interval)
+}
+
+internal fun reminderRepeatText(repeat: ReminderRepeat, interval: Int): String {
+    if (repeat == ReminderRepeat.NONE) return repeat.everyText
+    if (interval <= 1) return repeat.everyText
+    val unit = when (repeat) {
+        ReminderRepeat.DAILY -> "days"
+        ReminderRepeat.WEEKLY -> "weeks"
+        ReminderRepeat.MONTHLY -> "months"
+        else -> "years"
+    }
+    return "Every $interval $unit"
+}
 
 internal object ReminderStore {
     private const val PREFS = "day_calculator_reminders"
@@ -36,7 +78,7 @@ internal object ReminderStore {
     fun load(context: Context): List<DateReminder> {
         val raw = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY, "") ?: ""
         return raw.lineSequence().mapNotNull { line ->
-            val p = line.split("|", limit = 5)
+            val p = line.split("|", limit = 6)
             if (p.size < 3) return@mapNotNull null
             val date = runCatching { LocalDate.parse(p[2]) }.getOrNull() ?: return@mapNotNull null
             val time = if (p.size >= 4) {
@@ -44,14 +86,15 @@ internal object ReminderStore {
             } else {
                 LocalTime.of(9, 0)
             }
-            val repeatsYearly = p.getOrNull(4)?.toBooleanStrictOrNull() ?: false
-            if (p[0].isBlank() || p[1].isBlank()) null else DateReminder(p[0], p[1], date, time, repeatsYearly)
+            val repeat = ReminderRepeat.fromStored(p.getOrNull(4)?.trim())
+            val interval = (p.getOrNull(5)?.trim()?.toIntOrNull() ?: 1).coerceIn(1, 99)
+            if (p[0].isBlank() || p[1].isBlank()) null else DateReminder(p[0], p[1], date, time, repeat, interval)
         }.sortedWith(compareBy<DateReminder> { it.date }.thenBy { it.time }).toList()
     }
 
     fun save(context: Context, reminders: List<DateReminder>) {
         val raw = reminders.joinToString("\n") {
-            "${it.id}|${it.title.replace("|", " ").replace("\n", " ")}|${it.date}|${it.time}|${it.repeatsYearly}"
+            "${it.id}|${it.title.replace("|", " ").replace("\n", " ")}|${it.date}|${it.time}|${it.repeat.toStored()}|${it.interval}"
         }
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY, raw).apply()
     }
@@ -65,11 +108,107 @@ internal fun yearlyReminderOccurrenceDate(originalDate: LocalDate, year: Int): L
         originalDate.withYear(year)
     }
 
+/** Monthly rule: use the same day of the month; in shorter months use the last day (31st becomes 30th/28th). */
+private fun monthlyOccurrenceDate(originalDate: LocalDate, year: Int, month: Int): LocalDate {
+    val ym = java.time.YearMonth.of(year, month)
+    return ym.atDay(minOf(originalDate.dayOfMonth, ym.lengthOfMonth()))
+}
+
 internal fun reminderTarget(reminder: DateReminder, now: LocalDateTime): LocalDateTime {
-    if (!reminder.repeatsYearly) return LocalDateTime.of(reminder.date, reminder.time)
-    val candidate = LocalDateTime.of(yearlyReminderOccurrenceDate(reminder.date, now.year), reminder.time)
-    return if (candidate.isAfter(now)) candidate else {
-        LocalDateTime.of(yearlyReminderOccurrenceDate(reminder.date, now.year + 1), reminder.time)
+    val time = reminder.time
+    val n = reminder.interval.coerceAtLeast(1)
+    val first = LocalDateTime.of(reminder.date, time)
+    return when (reminder.repeat) {
+        ReminderRepeat.NONE -> first
+        ReminderRepeat.YEARLY -> {
+            if (n == 1) {
+                // Plain yearly keeps the original year as a label only (birthdays, anniversaries).
+                val candidate = LocalDateTime.of(yearlyReminderOccurrenceDate(reminder.date, now.year), time)
+                if (candidate.isAfter(now)) candidate else {
+                    LocalDateTime.of(yearlyReminderOccurrenceDate(reminder.date, now.year + 1), time)
+                }
+            } else if (first.isAfter(now)) first else {
+                val k = (now.year - reminder.date.year) / n
+                var year = reminder.date.year + k * n
+                var candidate = LocalDateTime.of(yearlyReminderOccurrenceDate(reminder.date, year), time)
+                if (!candidate.isAfter(now)) {
+                    year += n
+                    candidate = LocalDateTime.of(yearlyReminderOccurrenceDate(reminder.date, year), time)
+                }
+                candidate
+            }
+        }
+        // Daily, weekly and monthly reminders start on the saved date and then repeat.
+        ReminderRepeat.DAILY, ReminderRepeat.WEEKLY -> {
+            if (first.isAfter(now)) first else {
+                val step = if (reminder.repeat == ReminderRepeat.WEEKLY) 7L * n else n.toLong()
+                val passed = ChronoUnit.DAYS.between(reminder.date, now.toLocalDate())
+                var candidate = LocalDateTime.of(reminder.date.plusDays((passed / step) * step), time)
+                if (!candidate.isAfter(now)) candidate = candidate.plusDays(step)
+                candidate
+            }
+        }
+        ReminderRepeat.MONTHLY -> {
+            if (first.isAfter(now)) first else {
+                val monthsPassed = (now.year - reminder.date.year) * 12 + (now.monthValue - reminder.date.monthValue)
+                var k = Math.floorDiv(monthsPassed, n)
+                var month = java.time.YearMonth.from(reminder.date).plusMonths((k * n).toLong())
+                var candidate = LocalDateTime.of(monthlyOccurrenceDate(reminder.date, month.year, month.monthValue), time)
+                if (!candidate.isAfter(now)) {
+                    month = month.plusMonths(n.toLong())
+                    candidate = LocalDateTime.of(monthlyOccurrenceDate(reminder.date, month.year, month.monthValue), time)
+                }
+                candidate
+            }
+        }
+    }
+}
+
+/** The occurrence just before [target], used for the widget progress ring. Null when there is none (one-time, or the very first occurrence). */
+internal fun previousReminderOccurrence(reminder: DateReminder, target: LocalDateTime): LocalDateTime? {
+    val time = reminder.time
+    val n = reminder.interval.coerceAtLeast(1)
+    return when (reminder.repeat) {
+        ReminderRepeat.NONE -> null
+        ReminderRepeat.YEARLY ->
+            if (n == 1) {
+                LocalDateTime.of(yearlyReminderOccurrenceDate(reminder.date, target.year - 1), time)
+            } else {
+                LocalDateTime.of(yearlyReminderOccurrenceDate(reminder.date, target.year - n), time)
+                    .takeIf { !it.toLocalDate().isBefore(reminder.date) }
+            }
+        ReminderRepeat.DAILY -> target.minusDays(n.toLong()).takeIf { !it.toLocalDate().isBefore(reminder.date) }
+        ReminderRepeat.WEEKLY -> target.minusDays(7L * n).takeIf { !it.toLocalDate().isBefore(reminder.date) }
+        ReminderRepeat.MONTHLY -> {
+            val prev = java.time.YearMonth.from(target.toLocalDate()).minusMonths(n.toLong())
+            LocalDateTime.of(monthlyOccurrenceDate(reminder.date, prev.year, prev.monthValue), time)
+                .takeIf { !it.toLocalDate().isBefore(reminder.date) }
+        }
+    }
+}
+
+/** True when [date] is a day on which [reminder] happens (used by the calendar). */
+internal fun reminderOccursOnDate(date: LocalDate, reminder: DateReminder): Boolean {
+    val n = reminder.interval.coerceAtLeast(1)
+    return when (reminder.repeat) {
+        ReminderRepeat.NONE -> date == reminder.date
+        ReminderRepeat.YEARLY ->
+            if (n == 1) {
+                date == yearlyReminderOccurrenceDate(reminder.date, date.year)
+            } else {
+                !date.isBefore(reminder.date) &&
+                    (date.year - reminder.date.year) % n == 0 &&
+                    date == yearlyReminderOccurrenceDate(reminder.date, date.year)
+            }
+        ReminderRepeat.DAILY, ReminderRepeat.WEEKLY -> {
+            val step = if (reminder.repeat == ReminderRepeat.WEEKLY) 7L * n else n.toLong()
+            !date.isBefore(reminder.date) && ChronoUnit.DAYS.between(reminder.date, date) % step == 0L
+        }
+        ReminderRepeat.MONTHLY -> {
+            val months = (date.year - reminder.date.year) * 12 + (date.monthValue - reminder.date.monthValue)
+            !date.isBefore(reminder.date) && months % n == 0 &&
+                date == monthlyOccurrenceDate(reminder.date, date.year, date.monthValue)
+        }
     }
 }
 
@@ -391,15 +530,17 @@ internal class DateReminderReceiver : BroadcastReceiver() {
                 val reminderId = intent.getStringExtra("id") ?: return
                 val reminders = ReminderStore.load(context)
                 val reminder = reminders.firstOrNull { it.id == reminderId } ?: return
-                // Done dismisses this occurrence for yearly reminders but keeps the
-                // saved reminder and schedules its next annual occurrence.
+                // Done dismisses this occurrence for repeating reminders but keeps the
+                // saved reminder and schedules its next occurrence.
                 NotificationManagerCompat.from(context).cancel(ReminderScheduler.notificationId(context, reminderId))
-                if (reminder.repeatsYearly) {
+                if (reminder.repeats) {
                     ReminderScheduler.schedule(context, reminder)
                 } else {
                     ReminderScheduler.cancel(context, reminderId)
                     ReminderStore.save(context, reminders.filterNot { it.id == reminderId })
                     DateReminderWidget.updateAll(context)
+                    // If this reminder belongs to a to-do, Done also completes that to-do.
+                    TodoStore.completeForReminder(context, reminderId)
                 }
                 return
             }
@@ -462,7 +603,7 @@ internal class DateReminderReceiver : BroadcastReceiver() {
         val lines = buildList {
             add(relation)
             if (dateText != null && weekday != null) add("$dateText · $weekday")
-            if (reminder?.repeatsYearly == true) add("Every year")
+            if (reminder != null && reminder.repeats) add(reminder.repeatText)
             special.message?.let { add(it) }
         }
         val contentText = lines.firstOrNull() ?: "Reminder"
@@ -486,6 +627,8 @@ internal class DateReminderReceiver : BroadcastReceiver() {
             },
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
+        // Reminders created from a to-do say so in the notification header.
+        val isTodoReminder = TodoStore.load(context).any { it.reminderId == reminderId }
         val notification = NotificationCompat.Builder(context, ReminderScheduler.channelId())
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(special.titlePrefix?.let { "$it $title" } ?: title)
@@ -496,11 +639,12 @@ internal class DateReminderReceiver : BroadcastReceiver() {
             .addAction(R.drawable.ic_notification, "Done", doneIntent)
             .addAction(R.drawable.ic_notification, "Snooze 10 min", snoozeIntent)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .apply { if (isTodoReminder) setSubText("To-do reminder") }
             .build()
         if (Build.VERSION.SDK_INT < 33 || NotificationManagerCompat.from(context).areNotificationsEnabled()) {
             NotificationManagerCompat.from(context).notify(notificationId, notification)
         }
-        if (reminder?.repeatsYearly == true) {
+        if (reminder.repeats) {
             ReminderScheduler.schedule(context, reminder)
         }
     }

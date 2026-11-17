@@ -7,4 +7,22 @@
         <item name="android:windowLightStatusBar">false</item>
         <item name="android:windowBackground">@drawable/splash_background</item>
     </style>
+    <style name="Theme.DayCalcy.TodoQuickAdd" parent="android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowIsFloating">false</item>
+        <item name="android:backgroundDimEnabled">false</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowActionModeOverlay">true</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:colorAccent">#4CAF50</item>
+        <item name="android:windowAnimationStyle">@style/Animation.DayCalcy.NoTransition</item>
+    </style>
+    <!-- Animations are done in Compose (scrim fade + panel slide), so disable the system's. -->
+    <style name="Animation.DayCalcy.NoTransition" parent="@android:style/Animation">
+        <item name="android:windowEnterAnimation">@null</item>
+        <item name="android:windowExitAnimation">@null</item>
+    </style>
 </resources>

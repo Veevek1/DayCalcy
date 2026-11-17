@@ -95,10 +95,10 @@ internal fun calculateTrackerSnapshot(payload: String, today: LocalDate = LocalD
             else -> 0f
         }
     }
-    val goalDateBounded = if (validDateRange && start != null && savedGoalDate != null) {
+    val goalDateBounded = if (validDateRange) {
         today.coerceIn(start, savedGoalDate)
     } else null
-    val timeProgress = if (validDateRange && start != null && savedGoalDate != null && goalDateBounded != null) {
+    val timeProgress = if (validDateRange && goalDateBounded != null) {
         if (start == savedGoalDate) {
             if (today.isBefore(start)) 0f else 1f
         } else {
@@ -123,6 +123,6 @@ internal fun calculateTrackerSnapshot(payload: String, today: LocalDate = LocalD
         timeProgress = timeProgress,
         progress = valueProgress ?: timeProgress,
         valueTargetReached = valueTargetReached,
-        dateTargetReached = validDateRange && savedGoalDate != null && !today.isBefore(savedGoalDate)
+        dateTargetReached = validDateRange && !today.isBefore(savedGoalDate)
     )
 }

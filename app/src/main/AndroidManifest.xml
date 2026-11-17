@@ -12,6 +12,8 @@
         android:fullBackupContent="@xml/backup_rules"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:supportsRtl="true">
+        <service android:name=".TodoWidgetService" android:permission="android.permission.BIND_REMOTEVIEWS" android:exported="true" />
+        <activity android:name=".TodoQuickAddActivity" android:exported="false" android:theme="@style/Theme.DayCalcy.TodoQuickAdd" android:excludeFromRecents="true" android:taskAffinity="" android:launchMode="singleTask" />
         <activity android:name=".MainActivity" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
@@ -34,6 +36,13 @@
             <meta-data android:name="android.appwidget.provider" android:resource="@xml/date_reminder_widget_large_info" />
         </receiver>
 
+
+        <receiver android:name=".ResizableTodoWidget" android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/todo_widget_resizable_info" />
+        </receiver>
 
         <receiver android:name=".DateReminderReceiver" android:exported="false" />
 

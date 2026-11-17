@@ -1,5 +1,12 @@
 # Changelog
 
+## 3.44.1
+
+### New
+- Added a To-do List. Add tasks, tick them off and set reminders for them.
+- Added a To-do widget for your home screen that you can resize.
+- Reminders can now repeat every day, week or month, or on your own schedule.
+
 ## 3.44.0
 
 ### New

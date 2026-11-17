@@ -59,6 +59,10 @@ open class DateReminderWidget : AppWidgetProvider() {
     }
 
     override fun onReceive(context: Context, intent: Intent) {
+        if (intent.action == TodoWidget.ACTION_TOGGLE || intent.action == TodoWidget.ACTION_EDIT || intent.action == TodoWidget.ACTION_ADD) {
+            TodoWidget.handleToggle(context, intent)
+            return
+        }
         if (intent.action == ACTION_REFRESH_TRACKER) {
             val manager = AppWidgetManager.getInstance(context)
             val widgetId = intent.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, AppWidgetManager.INVALID_APPWIDGET_ID)
@@ -93,7 +97,8 @@ open class DateReminderWidget : AppWidgetProvider() {
     companion object {
         private val WIDGET_PROVIDERS = listOf(
             SmallDateReminderWidget::class.java,
-            WideDateReminderWidget::class.java
+            WideDateReminderWidget::class.java,
+            ResizableTodoWidget::class.java
         )
 
         private const val PREFS = "date_reminder_widgets"
@@ -139,9 +144,12 @@ open class DateReminderWidget : AppWidgetProvider() {
 
         private const val KEY_TYPE_PREFIX = "type_"
 
-        fun selectedContentType(context: Context, appWidgetId: Int): String =
-            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-                .getString(KEY_TYPE_PREFIX + appWidgetId, "REMINDER") ?: "REMINDER"
+        /** "TRACKER" or "REMINDER". */
+        fun selectedContentType(context: Context, appWidgetId: Int): String {
+            val stored = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .getString(KEY_TYPE_PREFIX + appWidgetId, "REMINDER")
+            return if (stored == "TRACKER") "TRACKER" else "REMINDER"
+        }
 
         fun setSelectedContentType(context: Context, appWidgetId: Int, type: String) {
             context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
@@ -385,15 +393,9 @@ open class DateReminderWidget : AppWidgetProvider() {
             val nowDateTime = LocalDateTime.now(ZoneId.systemDefault())
             val targetDateTime = reminderTarget(reminder, nowDateTime)
             val targetMillis = targetDateTime.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
-            val startMillis = if (reminder.repeatsYearly) {
-                val previousOccurrence = LocalDateTime.of(
-                    yearlyReminderOccurrenceDate(reminder.date, targetDateTime.year - 1),
-                    reminder.time
-                )
-                previousOccurrence.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
-            } else {
-                assignmentStartMillis(context, appWidgetId)
-            }
+            val startMillis = previousReminderOccurrence(reminder, targetDateTime)
+                ?.atZone(ZoneId.systemDefault())?.toInstant()?.toEpochMilli()
+                ?: assignmentStartMillis(context, appWidgetId)
             val nowMillis = System.currentTimeMillis()
             // The ring represents real elapsed progress from the moment this
             // widget was assigned to the reminder. It fills clockwise over time
@@ -550,6 +552,11 @@ open class DateReminderWidget : AppWidgetProvider() {
         }
 
         fun updateAppWidget(context: Context, manager: AppWidgetManager, appWidgetId: Int) {
+            // The resizable widget always shows the to-do list (there is no content type to choose).
+            if (manager.getAppWidgetInfo(appWidgetId)?.provider?.className == ResizableTodoWidget::class.java.name) {
+                TodoWidget.update(context, manager, appWidgetId)
+                return
+            }
             if (selectedContentType(context, appWidgetId) == "TRACKER") {
                 TrackerWidgetProvider.updateForExistingWidget(context, manager, appWidgetId)
                 return
@@ -743,3 +750,6 @@ class SmallDateReminderWidget : DateReminderWidget()
 
 /** Fixed 4×2 wide widget provider. It cannot be arbitrarily resized by the launcher. */
 class WideDateReminderWidget : DateReminderWidget()
+
+/** To-do list widget that the launcher can resize freely (width and height). Always shows the to-do list. */
+class ResizableTodoWidget : DateReminderWidget()

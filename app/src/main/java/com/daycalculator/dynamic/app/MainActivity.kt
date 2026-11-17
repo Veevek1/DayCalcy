@@ -77,6 +77,7 @@ import androidx.compose.ui.graphics.ColorFilter
 class MainActivity : ComponentActivity() {
     private var openReminderRequest by mutableStateOf(false)
     private var openTrackersRequest by mutableStateOf(false)
+    private var openTodosRequest by mutableStateOf(false)
     private var widgetConfigId: Int = AppWidgetManager.INVALID_APPWIDGET_ID
     private var configuringTrackerWidget: Boolean = false
     private val notificationPermissionLauncher = registerForActivityResult(
@@ -115,12 +116,15 @@ class MainActivity : ComponentActivity() {
         openReminderRequest = intent.getBooleanExtra(EXTRA_OPEN_REMINDER, false) ||
             intent.getBooleanExtra(EXTRA_OPEN_YEAR_PROGRESS, false)
         openTrackersRequest = intent.getBooleanExtra(EXTRA_OPEN_TRACKERS, false)
+        openTodosRequest = intent.getBooleanExtra(EXTRA_OPEN_TODOS, false)
         setContent {
             DayCalculatorApp(
                 openReminder = openReminderRequest,
                 onOpenReminderHandled = { openReminderRequest = false },
                 openTrackers = openTrackersRequest,
-                onOpenTrackersHandled = { openTrackersRequest = false }
+                onOpenTrackersHandled = { openTrackersRequest = false },
+                openTodos = openTodosRequest,
+                onOpenTodosHandled = { openTodosRequest = false }
             )
         }
     }
@@ -153,10 +157,14 @@ class MainActivity : ComponentActivity() {
         if (intent.getBooleanExtra(EXTRA_OPEN_TRACKERS, false)) {
             openTrackersRequest = true
         }
+        if (intent.getBooleanExtra(EXTRA_OPEN_TODOS, false)) {
+            openTodosRequest = true
+        }
     }
 
     companion object {
         const val EXTRA_OPEN_TRACKERS = "daycalcy_open_trackers"
+        const val EXTRA_OPEN_TODOS = "daycalcy_open_todos"
     }
 
     private fun isTrackerWidget(widgetId: Int, intent: Intent?): Boolean {
@@ -247,7 +255,7 @@ private val LocalCalculatorStatePersistenceEnabled = compositionLocalOf { true }
 enum class ThemeMode { SYSTEM, LIGHT, DARK, AMOLED }
 
 enum class MainTab(val label: String) {
-    AGE("Age"), DIFFERENCE("Date Difference"), ADD_SUBTRACT("Add / Subtract"), COUNTER("Day Counter"), WEEKDAY("Day of Week"), VALUE_TRACKER("Value Tracker"), REMINDER("Date Reminder"), DURATION("Duration Calculator"), CALENDAR("Calendar"), HISTORY("History"), TRACKERS("Saved Trackers"), CHANGELOG("Changelog")
+    AGE("Age"), DIFFERENCE("Date Difference"), ADD_SUBTRACT("Add / Subtract"), COUNTER("Day Counter"), WEEKDAY("Day of Week"), VALUE_TRACKER("Value Tracker"), REMINDER("Date Reminder"), DURATION("Duration Calculator"), CALENDAR("Calendar"), HISTORY("History"), TRACKERS("Saved Trackers"), TODOS("To-do List"), CHANGELOG("Changelog")
 }
 
 data class DateParts(val day: Int?, val month: Int?, val year: Int?)
@@ -570,11 +578,17 @@ private fun WidgetReminderChooser(
     val themeMode = remember { mutableStateOf(loadThemeMode(context)) }
     val effectiveThemeMode = resolveEffectiveThemeMode(context, themeMode.value, isSystemInDarkTheme())
     val dark = effectiveThemeMode != ThemeMode.LIGHT
-    var selectedType by remember {
-        mutableStateOf(if (isTrackerWidget) "TRACKER" else DateReminderWidget.selectedContentType(context, appWidgetId))
+    val storedType = remember {
+        if (isTrackerWidget) "TRACKER" else DateReminderWidget.selectedContentType(context, appWidgetId)
     }
+    var selectedType by remember { mutableStateOf(storedType) }
     var selectedId by remember {
-        mutableStateOf(if (selectedType == "TRACKER") TrackerWidgetData.selected(context, appWidgetId).takeIf { it >= 0L }?.toString() else DateReminderWidget.selectedReminderId(context, appWidgetId))
+        mutableStateOf(
+            when (storedType) {
+                "TRACKER" -> TrackerWidgetData.selected(context, appWidgetId).takeIf { it >= 0L }?.toString()
+                else -> DateReminderWidget.selectedReminderId(context, appWidgetId)
+            }
+        )
     }
     val reminders = remember { ReminderStore.load(context) }
     val trackers = remember { TrackerStore.load(context) }
@@ -633,10 +647,9 @@ private fun WidgetReminderChooser(
                             onClick = {
                                 val id = selectedId ?: return@TextButton
                                 DateReminderWidget.setSelectedContentType(context, appWidgetId, selectedType)
-                                if (selectedType == "TRACKER") {
-                                    TrackerWidgetData.select(context, appWidgetId, id.toLong())
-                                } else {
-                                    DateReminderWidget.setSelectedReminder(context, appWidgetId, id)
+                                when {
+                                    selectedType == "TRACKER" -> TrackerWidgetData.select(context, appWidgetId, id.toLong())
+                                    else -> DateReminderWidget.setSelectedReminder(context, appWidgetId, id)
                                 }
                                 DateReminderWidget.updateAppWidget(context, AppWidgetManager.getInstance(context), appWidgetId)
                                 val result = Intent().putExtra(
@@ -662,8 +675,10 @@ private fun WidgetReminderChooser(
                         Surface(
                             modifier = Modifier.weight(1f).clip(RoundedCornerShape(12.dp)).clickable {
                                 selectedType = type
-                                selectedId = if (type == "TRACKER") TrackerWidgetData.selected(context, appWidgetId).takeIf { it >= 0L }?.toString()
-                                    else DateReminderWidget.selectedReminderId(context, appWidgetId)
+                                selectedId = when (type) {
+                                    "TRACKER" -> TrackerWidgetData.selected(context, appWidgetId).takeIf { it >= 0L }?.toString()
+                                    else -> DateReminderWidget.selectedReminderId(context, appWidgetId)
+                                }
                             },
                             shape = RoundedCornerShape(12.dp),
                             color = if (selectedType == type) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceVariant
@@ -674,18 +689,16 @@ private fun WidgetReminderChooser(
                 }
                 Spacer(Modifier.height(12.dp))
                 Text(
-                    if (selectedType == "TRACKER") "Select which saved tracker this widget should display." else "Select which reminder this widget should display.",
+                    when (selectedType) {
+                        "TRACKER" -> "Select which saved tracker this widget should display."
+                        else -> "Select which reminder this widget should display."
+                    },
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Spacer(Modifier.height(16.dp))
                 if (selectedType == "TRACKER" && trackers.isEmpty()) {
                     Text("No saved trackers yet. Open DayCalcy, save a Value Tracker, then add this widget.", style = MaterialTheme.typography.bodyLarge)
-                } else if (selectedType != "TRACKER" && reminders.isEmpty() && !yearProgressEnabled.value) {
-                    Text(
-                        "No reminders saved yet. Open DayCalcy and add a reminder first.",
-                        style = MaterialTheme.typography.bodyLarge
-                    )
                 } else {
                     LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         if (selectedType == "TRACKER") {
@@ -781,7 +794,9 @@ fun DayCalculatorApp(
     openReminder: Boolean = false,
     onOpenReminderHandled: () -> Unit = {},
     openTrackers: Boolean = false,
-    onOpenTrackersHandled: () -> Unit = {}
+    onOpenTrackersHandled: () -> Unit = {},
+    openTodos: Boolean = false,
+    onOpenTodosHandled: () -> Unit = {}
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     var themeMode by remember { mutableStateOf(loadThemeMode(context)) }
@@ -838,6 +853,15 @@ fun DayCalculatorApp(
             returnTool = null
             selectedTool = MainTab.TRACKERS
             onOpenTrackersHandled()
+        }
+    }
+    LaunchedEffect(openTodos) {
+        if (openTodos) {
+            toolScrollStates[MainTab.TODOS] = ScrollState(0)
+            historyEntry = null
+            returnTool = null
+            selectedTool = MainTab.TODOS
+            onOpenTodosHandled()
         }
     }
 
@@ -1206,6 +1230,7 @@ fun DayCalculatorApp(
                             toolScrollStates[targetTool] = ScrollState(0)
                             selectedTool = targetTool
                         })
+                        MainTab.TODOS -> TodoScreen(scrollState = contentScrollState)
                         MainTab.CHANGELOG -> ChangelogScreen()
                         null -> Unit
                     }
@@ -1257,6 +1282,7 @@ private fun HomeScreen(onSelect: (MainTab) -> Unit) {
     ToolCard("Day of Week", "Find the weekday for any date", "05", onClick = { onSelect(MainTab.WEEKDAY) })
     ToolCard("Duration Calculator", "Find time between dates", "06", onClick = { onSelect(MainTab.DURATION) })
     ToolCard("Value Tracker", "Track value over time", "07", onClick = { onSelect(MainTab.VALUE_TRACKER) })
+    ToolCard("To-do List", "Check off tasks, add a widget", "08", onClick = { onSelect(MainTab.TODOS) }, iconRes = R.drawable.ic_todo)
     ReminderToolCard(onClick = { onSelect(MainTab.REMINDER) })
 
     Spacer(Modifier.height(14.dp))
@@ -1291,11 +1317,15 @@ private fun HomeScreen(onSelect: (MainTab) -> Unit) {
 }
 
 @Composable
-private fun ToolCard(title: String, subtitle: String, number: String, onClick: () -> Unit) {
+private fun ToolCard(title: String, subtitle: String, number: String, onClick: () -> Unit, iconRes: Int? = null) {
     Card(Modifier.fillMaxWidth().padding(vertical = 5.dp).clip(RoundedCornerShape(18.dp)).clickable(onClick = onClick), shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 15.dp), verticalAlignment = Alignment.CenterVertically) {
             Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surface, tonalElevation = 1.dp) {
-                Text(number, modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                if (iconRes != null) {
+                    Icon(painterResource(iconRes), contentDescription = title, tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(10.dp).size(28.dp))
+                } else {
+                    Text(number, modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                }
             }
             Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
@@ -1351,7 +1381,7 @@ private fun ThemeMode.label(full: Boolean = false): String = when (this) {
 }
 
 @Composable
-private fun DateSelector(
+internal fun DateSelector(
     title: String,
     state: DateInputState,
     onChanged: (DateInputState) -> Unit,
@@ -2571,12 +2601,27 @@ fun DayOfWeekScreen(historyEntry: HistoryEntry? = null) {
     }
 }
 
-private fun formattedTime(value: LocalTime): String = value.format(DateTimeFormatter.ofPattern("h:mm a", Locale.getDefault()))
+internal fun formattedTime(value: LocalTime): String = value.format(DateTimeFormatter.ofPattern("h:mm a", Locale.getDefault()))
 
-private fun defaultReminderTime(now: LocalDateTime = LocalDateTime.now()): LocalTime {
+internal fun defaultReminderTime(now: LocalDateTime = LocalDateTime.now()): LocalTime {
     // The picker works in whole minutes. Start the Add Reminder form at the
     // next selectable minute so a new same-day reminder is immediately valid.
     return now.withSecond(0).withNano(0).plusMinutes(1).toLocalTime()
+}
+
+internal fun repeatHelpText(repeat: ReminderRepeat, interval: Int = 1): String? = if (interval > 1 && repeat != ReminderRepeat.NONE) {
+    when (repeat) {
+        ReminderRepeat.DAILY -> "Repeats every $interval days, starting from the chosen date."
+        ReminderRepeat.WEEKLY -> "Repeats every $interval weeks on the same weekday, starting from the chosen date."
+        ReminderRepeat.MONTHLY -> "Repeats every $interval months on the same day, starting from the chosen date. In shorter months it uses the last day."
+        else -> "Repeats every $interval years on the same date, starting from the chosen date."
+    }
+} else when (repeat) {
+    ReminderRepeat.NONE -> null
+    ReminderRepeat.DAILY -> "Repeats every day at the chosen time, starting from the chosen date."
+    ReminderRepeat.WEEKLY -> "Repeats every week on the same weekday as the chosen date."
+    ReminderRepeat.MONTHLY -> "Repeats every month on the same day. In shorter months it uses the last day of the month."
+    ReminderRepeat.YEARLY -> "Useful for birthdays and anniversaries. The year is kept as the original date; the reminder uses the next occurrence."
 }
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -2590,11 +2635,19 @@ private fun DateReminderScreen(
     val activity = context as? MainActivity
     val today = LocalDate.now()
     var reminders by remember { mutableStateOf(ReminderStore.load(context)) }
+    // Reminders that were created from a to-do (they get a small "To-do reminder" tag in the list).
+    val todoReminderIds = remember(reminders) { TodoStore.load(context).mapNotNull { it.reminderId }.toSet() }
     var yearProgressEnabled by remember { mutableStateOf(DateReminderWidget.isYearProgressEnabled(context)) }
     var title by rememberSaveable { mutableStateOf("") }
     var date by rememberSaveable(stateSaver = DateInputStateSaver) { mutableStateOf(DateInputState.from(today)) }
     var time by rememberSaveable(stateSaver = LocalTimeSaver) { mutableStateOf(defaultReminderTime()) }
-    var repeatsYearly by rememberSaveable { mutableStateOf(false) }
+    var repeatName by rememberSaveable { mutableStateOf(ReminderRepeat.NONE.name) }
+    val repeat = ReminderRepeat.fromStored(repeatName)
+    var customRepeat by rememberSaveable { mutableStateOf(false) }
+    var intervalText by rememberSaveable { mutableStateOf("1") }
+    val intervalValue: Int? = if (customRepeat && repeat != ReminderRepeat.NONE) intervalText.toIntOrNull()?.takeIf { it in 1..99 } else 1
+    var showRepeatMenu by remember { mutableStateOf(false) }
+    var showUnitMenu by remember { mutableStateOf(false) }
     var showForm by rememberSaveable { mutableStateOf(false) }
     var editingId by rememberSaveable { mutableStateOf<String?>(null) }
     var showTimePicker by rememberSaveable { mutableStateOf(false) }
@@ -2615,7 +2668,9 @@ private fun DateReminderScreen(
         val nextTime = defaultReminderTime()
         date = DateInputState.from(if (nextTime < LocalTime.now()) currentDate.plusDays(1) else currentDate)
         time = nextTime
-        repeatsYearly = false
+        repeatName = ReminderRepeat.NONE.name
+        customRepeat = false
+        intervalText = "1"
         editingId = null
         showForm = true
     }
@@ -2624,7 +2679,9 @@ private fun DateReminderScreen(
         title = reminder.title
         date = DateInputState.from(reminder.date)
         time = reminder.time
-        repeatsYearly = reminder.repeatsYearly
+        repeatName = reminder.repeat.name
+        customRepeat = reminder.interval > 1
+        intervalText = reminder.interval.toString()
         editingId = reminder.id
         showForm = true
     }
@@ -2655,7 +2712,9 @@ private fun DateReminderScreen(
     fun reminderValidationMessage(): String? {
         val currentDate = LocalDate.now()
         val selected = date.toDate() ?: return "Please enter a valid reminder date."
-        if (repeatsYearly) return null
+        if (intervalValue == null) return "Enter a repeat number from 1 to 99."
+        // Repeating reminders may start on a past date; the next occurrence is used.
+        if (repeat != ReminderRepeat.NONE) return null
         if (selected.isBefore(currentDate)) {
             return "Past dates can't be used for reminders. Please choose today or a future date."
         }
@@ -2715,7 +2774,7 @@ private fun DateReminderScreen(
         Text("Saved reminders", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         reminders.forEach { reminder ->
             val isHighlighted = highlightedReminderId == reminder.id
-            val highlightColor = if (reminder.repeatsYearly) {
+            val highlightColor = if (reminder.repeats) {
                 Color(0xFF7E57C2)
             } else {
                 Color(0xFFFFA000)
@@ -2750,10 +2809,18 @@ private fun DateReminderScreen(
             ) {
                 Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
+                        if (reminder.id in todoReminderIds) {
+                            Text(
+                                "To-do reminder",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                         Text(reminder.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                         Text(formatDate(reminder.date), style = MaterialTheme.typography.bodyMedium)
                         Text(
-                            if (reminder.repeatsYearly) "Yearly" else "One-time",
+                            if (reminder.repeats && reminder.interval > 1) "Custom" else when (reminder.repeat) { ReminderRepeat.NONE -> "One-time"; ReminderRepeat.DAILY -> "Daily"; ReminderRepeat.WEEKLY -> "Weekly"; ReminderRepeat.MONTHLY -> "Monthly"; ReminderRepeat.YEARLY -> "Yearly" },
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -2768,9 +2835,9 @@ private fun DateReminderScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Text(
-                            if (reminder.repeatsYearly) {
+                            if (reminder.repeats) {
                                 val next = reminderTarget(reminder, LocalDateTime.now())
-                                "Every year • Next: ${formatDate(next.toLocalDate())} • ${weekdayText(reminder)}"
+                                "${reminder.repeatText} • Next: ${formatDate(next.toLocalDate())} • ${weekdayText(reminder)}"
                             } else {
                                 "${totalDaysText(reminder)} • ${weekdayText(reminder)}"
                             },
@@ -2812,18 +2879,113 @@ private fun DateReminderScreen(
                     OutlinedButton(onClick = { showTimePicker = true }, modifier = Modifier.fillMaxWidth()) {
                         Text("Reminder time: ${formattedTime(time)}")
                     }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(checked = repeatsYearly, onCheckedChange = { repeatsYearly = it })
-                        Column {
-                            Text("Repeat every year", style = MaterialTheme.typography.bodyMedium)
-                            if (repeatsYearly) {
-                                Text(
-                                    "Useful for birthdays and anniversaries. The year is kept as the original date; the reminder uses the next occurrence.",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    Box(Modifier.fillMaxWidth()) {
+                        OutlinedButton(onClick = { showRepeatMenu = true }, modifier = Modifier.fillMaxWidth()) {
+                            Text(
+                                "Repeat: " + when {
+                                    repeat == ReminderRepeat.NONE -> ReminderRepeat.NONE.menuLabel
+                                    customRepeat -> "Custom"
+                                    else -> repeat.menuLabel
+                                }
+                            )
+                        }
+                        DropdownMenu(
+                            expanded = showRepeatMenu,
+                            onDismissRequest = { showRepeatMenu = false },
+                            shape = RoundedCornerShape(14.dp),
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                            tonalElevation = 0.dp,
+                            shadowElevation = 4.dp,
+                            border = androidx.compose.foundation.BorderStroke(
+                                0.75.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)
+                            )
+                        ) {
+                            ReminderRepeat.entries.forEach { option ->
+                                DropdownMenuItem(
+                                    text = { Text(option.menuLabel) },
+                                    modifier = Modifier.height(40.dp),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+                                    onClick = {
+                                        repeatName = option.name
+                                        customRepeat = false
+                                        intervalText = "1"
+                                        showRepeatMenu = false
+                                    }
                                 )
                             }
+                            DropdownMenuItem(
+                                text = { Text("Custom…") },
+                                modifier = Modifier.height(40.dp),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+                                onClick = {
+                                    if (repeat == ReminderRepeat.NONE) repeatName = ReminderRepeat.DAILY.name
+                                    customRepeat = true
+                                    showRepeatMenu = false
+                                }
+                            )
                         }
+                    }
+                    if (customRepeat && repeat != ReminderRepeat.NONE) {
+                        Spacer(Modifier.height(8.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            OutlinedTextField(
+                                value = intervalText,
+                                onValueChange = { value -> intervalText = value.filter { it.isDigit() }.take(2) },
+                                label = { Text("Every") },
+                                singleLine = true,
+                                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number),
+                                modifier = Modifier.width(96.dp)
+                            )
+                            Spacer(Modifier.width(10.dp))
+                            Box(Modifier.weight(1f)) {
+                                OutlinedButton(onClick = { showUnitMenu = true }, modifier = Modifier.fillMaxWidth()) {
+                                    Text(
+                                        when (repeat) {
+                                            ReminderRepeat.DAILY -> "Days"
+                                            ReminderRepeat.WEEKLY -> "Weeks"
+                                            ReminderRepeat.MONTHLY -> "Months"
+                                            else -> "Years"
+                                        }
+                                    )
+                                }
+                                DropdownMenu(
+                                    expanded = showUnitMenu,
+                                    onDismissRequest = { showUnitMenu = false },
+                                    shape = RoundedCornerShape(14.dp),
+                                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                            tonalElevation = 0.dp,
+                                            shadowElevation = 4.dp,
+                                            border = androidx.compose.foundation.BorderStroke(
+                                                0.75.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)
+                                            )
+                                ) {
+                                    listOf(
+                                        ReminderRepeat.DAILY to "Days",
+                                        ReminderRepeat.WEEKLY to "Weeks",
+                                        ReminderRepeat.MONTHLY to "Months",
+                                        ReminderRepeat.YEARLY to "Years"
+                                    ).forEach { (unit, label) ->
+                                        DropdownMenuItem(
+                                            text = { Text(label) },
+                                            modifier = Modifier.height(40.dp),
+                                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+                                            onClick = {
+                                                repeatName = unit.name
+                                                showUnitMenu = false
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    repeatHelpText(repeat, intervalValue ?: 1)?.let { help ->
+                        Text(
+                            help,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
                     }
                     reminderValidationMessage()?.let { message ->
                         Spacer(Modifier.height(8.dp))
@@ -2844,7 +3006,7 @@ private fun DateReminderScreen(
                     if (title.isNotBlank() && selected != null && reminderValidationMessage() == null) {
                         val oldId = editingId
                         if (oldId != null) ReminderScheduler.cancel(context, oldId)
-                        val reminder = DateReminder(oldId ?: newReminderId(), title.trim(), selected, time, repeatsYearly)
+                        val reminder = DateReminder(oldId ?: newReminderId(), title.trim(), selected, time, repeat, intervalValue ?: 1)
                         reminders = (reminders.filterNot { it.id == reminder.id } + reminder)
                             .sortedWith(compareBy<DateReminder> { it.date }.thenBy { it.time })
                         ReminderStore.save(context, reminders)
@@ -2860,7 +3022,9 @@ private fun DateReminderScreen(
                         val nextTime = defaultReminderTime()
                         date = DateInputState.from(if (nextTime < LocalTime.now()) currentDate.plusDays(1) else currentDate)
                         time = nextTime
-                        repeatsYearly = false
+                        repeatName = ReminderRepeat.NONE.name
+                        customRepeat = false
+                        intervalText = "1"
                         editingId = null
                         showForm = false
                     }
@@ -2921,11 +3085,7 @@ private fun CalendarScreen(
     val firstDay = month.dayOfWeek.value
     val days = month.lengthOfMonth()
     fun reminderOccursOn(date: LocalDate, reminder: DateReminder): Boolean =
-        if (reminder.repeatsYearly) {
-            date == yearlyReminderOccurrenceDate(reminder.date, date.year)
-        } else {
-            date == reminder.date
-        }
+        reminderOccursOnDate(date, reminder)
     val historyDotColor = Color(0xFF5B8DEF)
     val reminderDotColor = Color(0xFFD98B2B)
     val yearlyReminderDotColor = Color(0xFF8E63C7)
@@ -2979,8 +3139,8 @@ private fun CalendarScreen(
                             val isSelected = date == selected
                             val isToday = date == today
                             val hasHistory = date in historyDates
-                            val hasYearlyReminder = reminders.any { it.repeatsYearly && reminderOccursOn(date, it) }
-                            val hasOneTimeReminder = reminders.any { !it.repeatsYearly && reminderOccursOn(date, it) }
+                            val hasYearlyReminder = reminders.any { it.repeats && reminderOccursOn(date, it) }
+                            val hasOneTimeReminder = reminders.any { !it.repeats && reminderOccursOn(date, it) }
                             Box(
                                 Modifier
                                     .weight(1f)
@@ -3110,14 +3270,14 @@ private fun CalendarScreen(
                             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                                 Text(
                                     "•",
-                                    color = if (reminder.repeatsYearly) yearlyReminderDotColor else reminderDotColor,
+                                    color = if (reminder.repeats) yearlyReminderDotColor else reminderDotColor,
                                     fontWeight = FontWeight.Bold
                                 )
                                 Spacer(Modifier.width(8.dp))
                                 Column(Modifier.weight(1f)) {
                                     Text(reminder.title, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Medium)
                                     Text(
-                                        if (reminder.repeatsYearly) "Every year • ${reminder.time.format(DateTimeFormatter.ofPattern("h:mm a", Locale.getDefault()))}" else reminder.time.format(DateTimeFormatter.ofPattern("h:mm a", Locale.getDefault())),
+                                        if (reminder.repeats) "${reminder.repeatText} • ${reminder.time.format(DateTimeFormatter.ofPattern("h:mm a", Locale.getDefault()))}" else reminder.time.format(DateTimeFormatter.ofPattern("h:mm a", Locale.getDefault())),
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -3557,62 +3717,72 @@ private fun AboutDialog(darkTheme: Boolean, onDismiss: () -> Unit, onOpenChangel
                 DistributionSupportSection()
 
                 Spacer(Modifier.height(10.dp))
-                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
                 Text(
                     "Version: $versionName ($versionCode)",
                     style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.fillMaxWidth().clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null
-                    ) {
-                        clipboard.setPrimaryClip(android.content.ClipData.newPlainText("DayCalcy version", "$versionName ($versionCode)"))
-                    },
+                    modifier = Modifier.fillMaxWidth(),
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center
                 )
                 Text(
                     "© $currentYear Vivek",
                     style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.fillMaxWidth().clickable { },
+                    modifier = Modifier.fillMaxWidth(),
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center
                 )
 
                 if (BuildConfig.PRIVACY_POLICY_URL.isNotEmpty()) {
                     Spacer(Modifier.height(8.dp))
-                    Text(
-                        "Privacy Policy",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.fillMaxWidth().clickable {
-                            try {
-                                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(BuildConfig.PRIVACY_POLICY_URL)))
-                            } catch (_: Exception) { }
-                        }.padding(vertical = 4.dp),
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                    )
+                    Surface(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(50))
+                            .clickable {
+                                try {
+                                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(BuildConfig.PRIVACY_POLICY_URL)))
+                                } catch (_: Exception) { }
+                            },
+                        shape = RoundedCornerShape(50),
+                        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                        shadowElevation = 3.dp
+                    ) {
+                        Text(
+                            "Privacy Policy",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(horizontal = 18.dp, vertical = 9.dp),
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
+                    }
                 }
 
                 if (BuildConfig.SHOW_CHANGELOG) {
                     Spacer(Modifier.height(8.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth().clickable(
-                            onClick = onOpenChangelog
-                        ).padding(vertical = 4.dp),
-                        horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically
+                    Surface(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(50))
+                            .clickable(onClick = onOpenChangelog),
+                        shape = RoundedCornerShape(50),
+                        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                        shadowElevation = 3.dp
                     ) {
-                        Image(
-                            painter = painterResource(id = R.drawable.ic_changelog),
-                            contentDescription = null,
-                            modifier = Modifier.size(14.dp),
-                            colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(MaterialTheme.colorScheme.onSurfaceVariant)
-                        )
-                        Spacer(Modifier.width(5.dp))
-                        Text(
-                            "Changelog",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            style = MaterialTheme.typography.bodySmall,
-                            fontWeight = FontWeight.Normal
-                        )
+                        Row(
+                            modifier = Modifier.padding(horizontal = 18.dp, vertical = 9.dp),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Image(
+                                painter = painterResource(id = R.drawable.ic_changelog),
+                                contentDescription = null,
+                                modifier = Modifier.size(14.dp),
+                                colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(MaterialTheme.colorScheme.onSurfaceVariant)
+                            )
+                            Spacer(Modifier.width(5.dp))
+                            Text(
+                                "Changelog",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.Normal
+                            )
+                        }
                     }
                 }
             }
@@ -3626,6 +3796,13 @@ private fun AboutDialog(darkTheme: Boolean, onDismiss: () -> Unit, onOpenChangel
 @Composable
 private fun ChangelogScreen() {
     val entries = listOf(
+        "3.44.1" to listOf(
+            "New" to listOf(
+                "Added a To-do List. Add tasks, tick them off and set reminders for them.",
+                "Added a To-do widget for your home screen that you can resize.",
+                "Reminders can now repeat every day, week or month, or on your own schedule."
+            )
+        ),
         "3.44.0" to listOf(
             "New" to listOf(
                 "Added Saved Trackers to save and manage your calculations.",
