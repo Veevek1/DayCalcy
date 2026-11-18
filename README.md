@@ -18,7 +18,6 @@ There are also reminders that repeat daily, weekly, monthly, yearly or on a cust
 
 You also get a calendar that shows your reminders, a history of your last calculations, a year progress view, home screen countdown widgets, and light and dark themes.
 
-Note: The to-do feature is currently in testing and not available in latest release. It is planned for the next update.
 
 ## Privacy
 
