@@ -9,7 +9,7 @@
     android:initialLayout="@layout/widget_date_reminder_wide"
     android:previewLayout="@layout/widget_date_reminder_wide"
     android:widgetCategory="home_screen"
-    android:widgetFeatures="reconfigurable"
+    android:widgetFeatures="reconfigurable|hide_from_picker"
     android:configure="com.daycalculator.dynamic.app.MainActivity"
     android:label="Wide (4×2)"
     android:description="@string/wide_reminder_widget_description" />

@@ -9,7 +9,7 @@
     android:initialLayout="@layout/widget_date_reminder_small"
     android:previewLayout="@layout/widget_date_reminder_small"
     android:widgetCategory="home_screen"
-    android:widgetFeatures="reconfigurable"
+    android:widgetFeatures="reconfigurable|hide_from_picker"
     android:configure="com.daycalculator.dynamic.app.MainActivity"
     android:label="Small (2×2)"
     android:description="@string/reminder_widget_description" />

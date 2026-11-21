@@ -37,7 +37,14 @@
         </receiver>
 
 
-        <receiver android:name=".ResizableTodoWidget" android:exported="true">
+        <receiver android:name=".ResizableDayCalcyWidget" android:label="@string/widget_name_reminder_tracker" android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/daycalcy_widget_resizable_info" />
+        </receiver>
+
+        <receiver android:name=".ResizableTodoWidget" android:label="@string/widget_name_todo" android:exported="true">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>

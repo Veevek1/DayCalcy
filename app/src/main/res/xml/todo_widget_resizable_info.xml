@@ -9,7 +9,8 @@
     android:resizeMode="horizontal|vertical"
     android:updatePeriodMillis="0"
     android:initialLayout="@layout/widget_todo_resizable"
-    android:previewLayout="@layout/widget_todo_resizable"
+    android:previewLayout="@layout/widget_preview_todo"
+    android:previewImage="@drawable/widget_preview_todo"
     android:widgetCategory="home_screen"
-    android:label="To-do List (resizable)"
+    android:label="@string/widget_name_todo"
     android:description="@string/todo_widget_description" />

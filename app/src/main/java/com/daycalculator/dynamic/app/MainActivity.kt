@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
@@ -1430,28 +1431,51 @@ private fun DateChoiceBox(label: String, value: String, modifier: Modifier, onCl
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SelectionDialog(title: String, items: List<String>, selected: Int, selectedIndex: (Int) -> Int, onDismiss: () -> Unit, onSelect: (Int) -> Unit) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(title, fontWeight = FontWeight.Bold) },
-        text = {
-            LazyColumn(Modifier.fillMaxWidth().heightIn(max = 520.dp)) {
-                itemsIndexed(items) { index, item ->
-                    val actual = selectedIndex(index)
-                    Row(
-                        Modifier.fillMaxWidth().clickable { onSelect(index) }.padding(horizontal = 4.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(item, Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
-                        RadioButton(selected = actual == selected, onClick = { onSelect(index) })
+    // Same look as a standard dialog, but with tight padding so there is no empty space
+    // between the list and the Close button or below it.
+    BasicAlertDialog(onDismissRequest = onDismiss) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = AlertDialogDefaults.shape,
+            color = AlertDialogDefaults.containerColor,
+            tonalElevation = AlertDialogDefaults.TonalElevation
+        ) {
+            Column(Modifier.padding(start = 24.dp, top = 20.dp, end = 24.dp, bottom = 4.dp)) {
+                Text(
+                    title,
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = AlertDialogDefaults.titleContentColor
+                )
+                Spacer(Modifier.height(10.dp))
+                // Compact list: short rows, about five and a half visible, scrolled so the
+                // current selection is in view.
+                val listState = rememberLazyListState(
+                    initialFirstVisibleItemIndex = (items.indices.firstOrNull { selectedIndex(it) == selected } ?: 0)
+                        .let { (it - 2).coerceAtLeast(0) }
+                )
+                LazyColumn(Modifier.fillMaxWidth().heightIn(max = 226.dp), state = listState) {
+                    itemsIndexed(items) { index, item ->
+                        val actual = selectedIndex(index)
+                        Row(
+                            Modifier.fillMaxWidth().height(40.dp).clickable { onSelect(index) }.padding(horizontal = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(item, Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
+                            RadioButton(selected = actual == selected, onClick = { onSelect(index) })
+                        }
+                        HorizontalDivider()
                     }
-                    HorizontalDivider()
+                }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    TextButton(onClick = onDismiss) { Text("Close") }
                 }
             }
-        },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } }
-    )
+        }
+    }
 }
 
 @Composable
@@ -3724,7 +3748,7 @@ private fun AboutDialog(darkTheme: Boolean, onDismiss: () -> Unit, onOpenChangel
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center
                 )
                 Text(
-                    "© $currentYear Vivek",
+                    "© $currentYear Veevek",
                     style = MaterialTheme.typography.bodySmall,
                     modifier = Modifier.fillMaxWidth(),
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center
@@ -3796,6 +3820,20 @@ private fun AboutDialog(darkTheme: Boolean, onDismiss: () -> Unit, onOpenChangel
 @Composable
 private fun ChangelogScreen() {
     val entries = listOf(
+        "3.44.2" to listOf(
+            "New" to listOf(
+                "One resizable widget for a reminder or a tracker. Stretch it from 2 to 4 cells wide. Your existing widgets keep working.",
+                "The widget can now be made one row tall.",
+                "Added widget previews."
+            ),
+            "Improvements" to listOf(
+                "Smaller month and day pickers.",
+                "Simplified the Saved Tracker widgets. The small widget shows the name, the value and one progress bar. The large widget adds a slim time bar with the end date."
+            ),
+            "Fixes" to listOf(
+                "Fixed the reminder widget ring starting empty on a newly added widget."
+            )
+        ),
         "3.44.1" to listOf(
             "New" to listOf(
                 "Added a To-do List. Add tasks, tick them off and set reminders for them.",

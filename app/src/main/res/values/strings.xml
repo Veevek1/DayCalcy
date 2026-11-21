@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="widget_name_reminder_tracker">Reminder &amp; Tracker</string>
+    <string name="widget_name_todo">To-do List</string>
+    <string name="resizable_widget_description">Date reminder or saved tracker</string>
     <string name="reminder_widget_description">Shows a date reminder or a saved tracker</string>
-    <string name="todo_widget_description">Your to-do list. Resize it to show more or fewer tasks</string>
+    <string name="todo_widget_description">Your to-do list</string>
     <string name="wide_reminder_widget_description">Wide widget for a date reminder or a saved tracker</string>
 </resources>

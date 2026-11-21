@@ -62,23 +62,28 @@ open class TrackerWidgetProvider : AppWidgetProvider() {
 
         fun updateAll(context: Context) {
             val manager = AppWidgetManager.getInstance(context)
-            listOf(SmallDateReminderWidget::class.java, WideDateReminderWidget::class.java).forEach { c ->
+            listOf(SmallDateReminderWidget::class.java, WideDateReminderWidget::class.java, ResizableDayCalcyWidget::class.java).forEach { c ->
                 manager.getAppWidgetIds(ComponentName(context, c)).filter { DateReminderWidget.selectedContentType(context, it) == "TRACKER" }.forEach { updateForExistingWidget(context, manager, it) }
             }
         }
         fun update(context: Context, manager: AppWidgetManager, widgetId: Int) = updateForExistingWidget(context, manager, widgetId)
 
         fun updateForExistingWidget(context: Context, manager: AppWidgetManager, widgetId: Int) {
-            val providerName = manager.getAppWidgetInfo(widgetId)?.provider?.className
-            val large = providerName == WideDateReminderWidget::class.java.name
-            val layout = if (large) R.layout.widget_tracker_large else R.layout.widget_tracker_small
+            val width = DateReminderWidget.widgetWidth(context, manager, widgetId)
+            val row = DateReminderWidget.isRowHeight(manager, widgetId)
+            val large = width != WidgetWidth.COMPACT && !row
+            val layout = when {
+                row -> R.layout.widget_tracker_row
+                large -> R.layout.widget_tracker_large
+                else -> R.layout.widget_tracker_small
+            }
             val views = RemoteViews(context.packageName, layout)
             val dark = isDark(context)
-            val bg = if (dark) AndroidColor.BLACK else AndroidColor.rgb(245,245,245)
             val fg = if (dark) AndroidColor.WHITE else AndroidColor.rgb(17,17,17)
             val secondary = if (dark) AndroidColor.LTGRAY else AndroidColor.DKGRAY
-            views.setInt(R.id.tracker_widget_root, "setBackgroundColor", bg)
-            listOf(R.id.tracker_widget_name, R.id.tracker_widget_value, R.id.tracker_widget_subtitle, R.id.tracker_widget_extra).forEach { views.setTextColor(it, fg) }
+            views.setInt(R.id.tracker_widget_root, "setBackgroundResource", if (dark) R.drawable.widget_background_dark else R.drawable.widget_background_light)
+            views.setTextColor(R.id.tracker_widget_value, fg)
+            views.setTextColor(R.id.tracker_widget_name, secondary)
             views.setTextColor(R.id.tracker_widget_subtitle, secondary)
             views.setTextColor(R.id.tracker_widget_extra, secondary)
             // Keep secondary tracker labels subdued while keeping key values readable.
@@ -88,16 +93,11 @@ open class TrackerWidgetProvider : AppWidgetProvider() {
                 R.id.tracker_widget_time_progress_label,
                 R.id.tracker_widget_dates
             ).forEach { views.setTextColor(it, secondary) }
-            listOf(
-                R.id.tracker_widget_value_progress_label,
-                R.id.tracker_widget_time_progress_percent
-            ).forEach { views.setTextColor(it, fg) }
             val selected = TrackerWidgetData.selected(context, widgetId)
             val tracker = TrackerWidgetData.trackers(context).firstOrNull { it.id == selected }
             if (tracker == null) {
-                views.setTextViewText(R.id.tracker_widget_name, "DayCalcy Tracker")
+                views.setTextViewText(R.id.tracker_widget_name, "Tap to configure")
                 views.setTextViewText(R.id.tracker_widget_value, "Choose a tracker")
-                views.setTextViewText(R.id.tracker_widget_subtitle, "Tap to configure")
                 views.setTextViewText(R.id.tracker_widget_extra, "")
                 views.setViewVisibility(R.id.tracker_widget_value_progress_group, android.view.View.GONE)
                 views.setViewVisibility(R.id.tracker_widget_time_progress_group, android.view.View.GONE)
@@ -105,61 +105,48 @@ open class TrackerWidgetProvider : AppWidgetProvider() {
             } else {
                 val snapshot = calculateTrackerSnapshot(tracker.payload)
                 val currentText = snapshot.formattedValue()
-                val targetLabel = snapshot.targetLabel() ?: "No value target"
                 views.setTextViewText(R.id.tracker_widget_name, tracker.name)
                 views.setTextViewText(R.id.tracker_widget_value, currentText)
-                val widgetOptions = AppWidgetManager.getInstance(context).getAppWidgetOptions(widgetId)
-                val minWidthDp = widgetOptions.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 0)
-                val maxWidthDp = widgetOptions.getInt(AppWidgetManager.OPTION_APPWIDGET_MAX_WIDTH, 0)
-                val availableWidthDp = when {
-                    minWidthDp > 0 && maxWidthDp > 0 -> minOf(minWidthDp, maxWidthDp)
-                    minWidthDp > 0 -> minWidthDp
-                    else -> maxWidthDp
-                } - 24 // small widget horizontal padding
-                val labelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                    textSize = 11f * context.resources.displayMetrics.scaledDensity
-                }
-                val fullLabel = "Projected value today"
-                val shortLabel = "Projected value"
-                val labelWidthDp = labelPaint.measureText(fullLabel) /
-                    context.resources.displayMetrics.density
-                val subtitle = if (availableWidthDp > 0 && labelWidthDp > availableWidthDp) {
-                    shortLabel
-                } else {
-                    fullLabel
-                }
-                views.setTextViewText(R.id.tracker_widget_subtitle, subtitle)
-                views.setTextViewText(R.id.tracker_widget_target, targetLabel)
+                views.setViewVisibility(R.id.tracker_widget_subtitle, android.view.View.GONE)
 
                 val valueProgress = snapshot.valueProgress
                 val valueGroupVisibility = if (valueProgress != null) android.view.View.VISIBLE else android.view.View.GONE
                 views.setViewVisibility(R.id.tracker_widget_value_progress_group, valueGroupVisibility)
                 if (valueProgress != null) {
                     val percent = (valueProgress * 100).roundToInt()
-                    views.setTextViewText(R.id.tracker_widget_value_progress_label, "$percent%")
                     views.setProgressBar(R.id.tracker_widget_value_progress, 100, percent, false)
-                    val remaining = if (snapshot.valueTargetReached) "Value target reached" else
-                        "${formatTrackerNumber(kotlin.math.abs(snapshot.targetValue!! - snapshot.currentValue))}${if (snapshot.unit.isBlank()) "" else " ${snapshot.unit}"} remaining"
-                    views.setTextViewText(R.id.tracker_widget_remaining, remaining)
+                    val targetText = formatTrackerNumber(snapshot.targetValue!!) +
+                        if (large && snapshot.unit.isNotBlank()) " ${snapshot.unit}" else ""
+                    views.setTextViewText(
+                        R.id.tracker_widget_target,
+                        if (snapshot.valueTargetReached) "Target reached" else "$percent% of $targetText"
+                    )
                 }
 
+                // Small widget: one bar only (time bar when there is no value target).
+                // Large widget: value bar plus a thinner time bar when a date range exists.
                 val timeProgress = snapshot.timeProgress
-                val timeVisibility = if (timeProgress != null) android.view.View.VISIBLE else android.view.View.GONE
-                views.setViewVisibility(R.id.tracker_widget_time_progress_group, timeVisibility)
-                if (timeProgress != null) {
-                    val percent = (timeProgress * 100).roundToInt()
-                    if (large) {
-                        views.setTextViewText(R.id.tracker_widget_time_progress_label, "Time progress · $percent%")
-                    } else {
-                        views.setTextViewText(R.id.tracker_widget_time_progress_label, "Time progress")
-                        views.setTextViewText(R.id.tracker_widget_time_progress_percent, "$percent%")
-                    }
+                val showTime = timeProgress != null && (large || valueProgress == null)
+                views.setViewVisibility(R.id.tracker_widget_time_progress_group, if (showTime) android.view.View.VISIBLE else android.view.View.GONE)
+                if (showTime) {
+                    val percent = (timeProgress!! * 100).roundToInt()
                     views.setProgressBar(R.id.tracker_widget_time_progress, 100, percent, false)
-                    val dates = if (snapshot.startDate != null && snapshot.targetDate != null) "${snapshot.startDate} – ${snapshot.targetDate}" else ""
-                    views.setTextViewText(R.id.tracker_widget_dates, if (snapshot.dateTargetReached) "Target date reached" else dates)
+                    val endText = snapshot.targetDate?.format(java.time.format.DateTimeFormatter.ofPattern("d MMM", java.util.Locale.getDefault()))
+                    val label = when {
+                        snapshot.dateTargetReached -> "Target date reached"
+                        large && endText != null -> "$percent% of time · $endText"
+                        else -> "$percent% of time"
+                    }
+                    views.setTextViewText(R.id.tracker_widget_time_progress_label, label)
                 }
                 views.setViewVisibility(R.id.tracker_widget_ring, android.view.View.GONE)
                 views.setTextViewText(R.id.tracker_widget_extra, "")
+            }
+            // The smallest strip (2 cells wide) is too narrow for a progress bar: hide it so the
+            // name and value get the full width. Set explicitly so a resize never leaves it stale.
+            if (row && width == WidgetWidth.COMPACT) {
+                views.setViewVisibility(R.id.tracker_widget_value_progress_group, android.view.View.GONE)
+                views.setViewVisibility(R.id.tracker_widget_time_progress_group, android.view.View.GONE)
             }
             val rootIntent = if (tracker == null) {
                 Intent(context, MainActivity::class.java).apply {

@@ -26,6 +26,8 @@ import kotlin.math.roundToInt
  * Home-screen widget for one selected Date Reminder.
  * Each widget instance stores its own reminder ID, so multiple widgets can show different reminders.
  */
+internal enum class WidgetWidth { COMPACT, MEDIUM, WIDE }
+
 open class DateReminderWidget : AppWidgetProvider() {
 
     override fun onAppWidgetOptionsChanged(
@@ -98,12 +100,14 @@ open class DateReminderWidget : AppWidgetProvider() {
         private val WIDGET_PROVIDERS = listOf(
             SmallDateReminderWidget::class.java,
             WideDateReminderWidget::class.java,
+            ResizableDayCalcyWidget::class.java,
             ResizableTodoWidget::class.java
         )
 
         private const val PREFS = "date_reminder_widgets"
         private const val KEY_PREFIX = "reminder_"
         private const val KEY_START_PREFIX = "start_"
+        private const val KEY_REMINDER_START_PREFIX = "ringstart_"
         const val YEAR_PROGRESS_ID = "__YEAR_PROGRESS__"
         private const val YEAR_PROGRESS_PREFS = "date_reminder_settings"
         private const val YEAR_PROGRESS_ENABLED_KEY = "year_progress_enabled"
@@ -179,13 +183,32 @@ open class DateReminderWidget : AppWidgetProvider() {
             setSelectedReminder(context, appWidgetId, null)
         }
 
-        private fun assignmentStartMillis(context: Context, appWidgetId: Int): Long {
+        /**
+         * When the ring for a reminder starts filling. It is stored once per reminder, not per
+         * widget, so every widget showing the same reminder has the same ring, and adding,
+         * resizing or replacing a widget never resets it to empty.
+         */
+        private fun assignmentStartMillis(context: Context, appWidgetId: Int, reminderId: String): Long {
             val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            val existing = prefs.getLong(KEY_START_PREFIX + appWidgetId, 0L)
+            val key = KEY_REMINDER_START_PREFIX + reminderId
+            val existing = prefs.getLong(key, 0L)
             if (existing > 0L) return existing
-            val now = System.currentTimeMillis()
-            prefs.edit().putLong(KEY_START_PREFIX + appWidgetId, now).apply()
-            return now
+
+            // First time: reuse the oldest start time that widgets already showing this
+            // reminder have stored, so rings that were already partly filled keep their progress.
+            var oldest = Long.MAX_VALUE
+            prefs.all.forEach { (k, v) ->
+                if (k.startsWith(KEY_PREFIX) && v == reminderId) {
+                    val id = k.removePrefix(KEY_PREFIX)
+                    val start = prefs.getLong(KEY_START_PREFIX + id, 0L)
+                    if (start in 1 until oldest) oldest = start
+                }
+            }
+            val own = prefs.getLong(KEY_START_PREFIX + appWidgetId, 0L)
+            if (own in 1 until oldest) oldest = own
+            val start = if (oldest != Long.MAX_VALUE) oldest else System.currentTimeMillis()
+            prefs.edit().putLong(key, start).apply()
+            return start
         }
 
         fun updateAll(context: Context) {
@@ -272,7 +295,8 @@ open class DateReminderWidget : AppWidgetProvider() {
             now: LocalDateTime,
             target: LocalDateTime,
             small: Boolean,
-            wide: Boolean
+            wide: Boolean,
+            medium: Boolean = false
         ): String {
             if (!target.isAfter(now)) return "Due now"
 
@@ -285,6 +309,9 @@ open class DateReminderWidget : AppWidgetProvider() {
                 // time; longer reminders keep the calendar hierarchy.
                 val totalMinutes = java.time.Duration.between(zonedNow, zonedTarget).toMinutes()
                 if (totalMinutes < 24L * 60L) return exact.replace(" remaining", "")
+                // Only when years are involved, use a compact form (e.g. "1 year" / "1m 13d")
+                // so it fits the 2x2 widget. Everything else stays as before.
+                ReminderDateMath.compactYearCountdown(now.toLocalDate(), target.toLocalDate())?.let { return it }
                 val calendar = ReminderDateMath.calendarCountdown(now.toLocalDate(), target.toLocalDate())
                 return calendar.lines().take(2).joinToString("\n")
             }
@@ -294,6 +321,7 @@ open class DateReminderWidget : AppWidgetProvider() {
                 // The 4×2 widget is deliberately wide: keep the complete countdown
                 // but split it into two balanced lines so it remains readable in a
                 // single-row widget.
+                if (medium) return balanceCountdown(parts.joinToString(" · "))
                 return if (parts.size > 3) {
                     parts.take(3).joinToString(" · ") + "\n" + parts.drop(3).joinToString(" · ")
                 } else {
@@ -303,6 +331,59 @@ open class DateReminderWidget : AppWidgetProvider() {
             // Fallback for the old tall provider during an update. The current picker
             // no longer exposes a tall widget.
             return parts.joinToString("\n")
+        }
+
+        private fun rowLevel(width: WidgetWidth): Int = when (width) {
+            WidgetWidth.COMPACT -> 0
+            WidgetWidth.MEDIUM -> 1
+            WidgetWidth.WIDE -> 2
+        }
+
+        /** Single-line countdown for the 1-row strip (2×1 compact, 3×1 medium, 4×1 full words). */
+        private fun rowCountdownText(now: LocalDateTime, target: LocalDateTime, width: WidgetWidth): String {
+            if (!target.isAfter(now)) return "Due now"
+            val zone = ZoneId.systemDefault()
+            val zonedNow = now.atZone(zone)
+            val zonedTarget = target.atZone(zone)
+            val level = rowLevel(width)
+            val totalMinutes = java.time.Duration.between(zonedNow, zonedTarget).toMinutes()
+            if (totalMinutes < 24L * 60L) {
+                val parts = ReminderDateMath.preciseCountdownParts(zonedNow, zonedTarget)
+                if (parts.isEmpty()) return "Due now"
+                return when (level) {
+                    0 -> parts.joinToString(" ") {
+                        it.replace(" hours", "h").replace(" hour", "h").replace(" minutes", "m").replace(" minute", "m")
+                    }
+                    1 -> parts.joinToString(" ")
+                    else -> parts.joinToString(" · ")
+                }
+            }
+            return ReminderDateMath.rowCountdown(now.toLocalDate(), target.toLocalDate(), level)
+        }
+
+        private fun rowDateText(now: LocalDateTime, reminder: DateReminder, target: LocalDateTime, width: WidgetWidth): String {
+            val base = widgetDateText(now, reminder, false)
+            if (width != WidgetWidth.WIDE) return base
+            val days = ReminderDateMath.totalDays(now.toLocalDate(), target.toLocalDate())
+            return if (days >= 2L) "$base · $days days" else base
+        }
+
+        private fun yearRowCountdown(p: YearProgressData, width: WidgetWidth): String = when (width) {
+            WidgetWidth.COMPACT -> {
+                val parts = mutableListOf<String>()
+                if (p.months > 0) parts += "${p.months}m"
+                if (p.days > 0) parts += "${p.days}d"
+                if (parts.isEmpty()) parts += "${p.daysLeft}d"
+                parts.joinToString(" ") + " left"
+            }
+            WidgetWidth.MEDIUM -> p.shortRemainingText
+            WidgetWidth.WIDE -> {
+                val parts = mutableListOf<String>()
+                if (p.months > 0) parts += "${p.months} ${if (p.months == 1) "month" else "months"}"
+                if (p.days > 0) parts += "${p.days} ${if (p.days == 1) "day" else "days"}"
+                if (parts.isEmpty()) parts += "${p.daysLeft} ${if (p.daysLeft == 1L) "day" else "days"}"
+                "${p.year} ends in " + parts.joinToString(" · ")
+            }
         }
 
         private fun currentDateText(now: LocalDateTime): String =
@@ -395,7 +476,7 @@ open class DateReminderWidget : AppWidgetProvider() {
             val targetMillis = targetDateTime.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
             val startMillis = previousReminderOccurrence(reminder, targetDateTime)
                 ?.atZone(ZoneId.systemDefault())?.toInstant()?.toEpochMilli()
-                ?: assignmentStartMillis(context, appWidgetId)
+                ?: assignmentStartMillis(context, appWidgetId, reminder.id)
             val nowMillis = System.currentTimeMillis()
             // The ring represents real elapsed progress from the moment this
             // widget was assigned to the reminder. It fills clockwise over time
@@ -421,7 +502,9 @@ open class DateReminderWidget : AppWidgetProvider() {
             val daysLeft: Long,
             val percent: Double,
             val remainingText: String,
-            val shortRemainingText: String
+            val shortRemainingText: String,
+            val months: Int = 0,
+            val days: Int = 0
         )
 
         private fun yearProgress(now: LocalDateTime = LocalDateTime.now(ZoneId.systemDefault())): YearProgressData {
@@ -480,7 +563,9 @@ open class DateReminderWidget : AppWidgetProvider() {
             return YearProgressData(
                 date.year, total, passed, left, percent,
                 remainingText,
-                shortParts.joinToString(" ") + " left"
+                shortParts.joinToString(" ") + " left",
+                period.months,
+                period.days
             )
         }
 
@@ -535,6 +620,71 @@ open class DateReminderWidget : AppWidgetProvider() {
             views.setTextColor(R.id.widget_weekday, if (dark) Color.rgb(189, 189, 189) else Color.rgb(90, 90, 90))
         }
 
+        /**
+         * The resizable widget always keeps a 2-cell height, so its width-to-height ratio tells
+         * the sizes apart on any phone grid: about 1:1 at 2 cells, 1.5:1 at 3 cells and 2:1 at
+         * 4 cells. 2 cells use the compact layout; 3 and 4 cells use the wide layout, with
+         * slightly smaller countdown text at 3 cells so nothing is cut off.
+         */
+        private const val MEDIUM_MIN_RATIO = 1.3f
+        private const val WIDE_MIN_RATIO = 1.9f
+        private const val MEDIUM_FALLBACK_MIN_WIDTH_DP = 180
+        private const val WIDE_FALLBACK_MIN_WIDTH_DP = 250
+        /** Heights below this (dp) mean the resizable widget was shrunk to a single row. */
+        private const val ROW_MAX_HEIGHT_DP = 95
+        private const val ROW_MEDIUM_MIN_RATIO = 2.3f
+        private const val ROW_WIDE_MIN_RATIO = 3.2f
+
+        /** True when the resizable widget has been resized down to one row. */
+        internal fun isRowHeight(manager: AppWidgetManager, appWidgetId: Int): Boolean {
+            if (manager.getAppWidgetInfo(appWidgetId)?.provider?.className != ResizableDayCalcyWidget::class.java.name) return false
+            val height = manager.getAppWidgetOptions(appWidgetId).getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 0)
+            return height in 1 until ROW_MAX_HEIGHT_DP
+        }
+
+        internal fun widgetWidth(context: Context, manager: AppWidgetManager, appWidgetId: Int): WidgetWidth {
+            return when (manager.getAppWidgetInfo(appWidgetId)?.provider?.className) {
+                WideDateReminderWidget::class.java.name -> WidgetWidth.WIDE
+                ResizableDayCalcyWidget::class.java.name -> {
+                    val options = manager.getAppWidgetOptions(appWidgetId)
+                    val width = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 0)
+                    val height = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 0)
+                    if (height > 0) {
+                        val ratio = width.toFloat() / height
+                        if (height < ROW_MAX_HEIGHT_DP) {
+                            // 1-row strip: 2, 3 and 4 cells wide give ratios of roughly 1.8, 2.7 and 3.7.
+                            when {
+                                ratio >= ROW_WIDE_MIN_RATIO -> WidgetWidth.WIDE
+                                ratio >= ROW_MEDIUM_MIN_RATIO -> WidgetWidth.MEDIUM
+                                else -> WidgetWidth.COMPACT
+                            }
+                        } else when {
+                            ratio >= WIDE_MIN_RATIO -> WidgetWidth.WIDE
+                            ratio >= MEDIUM_MIN_RATIO -> WidgetWidth.MEDIUM
+                            else -> WidgetWidth.COMPACT
+                        }
+                    } else when {
+                        width >= WIDE_FALLBACK_MIN_WIDTH_DP -> WidgetWidth.WIDE
+                        width >= MEDIUM_FALLBACK_MIN_WIDTH_DP -> WidgetWidth.MEDIUM
+                        else -> WidgetWidth.COMPACT
+                    }
+                }
+                else -> WidgetWidth.COMPACT
+            }
+        }
+
+        /** True when this widget instance should use the wide layout (3 cells and wider). */
+        fun useWideLayout(context: Context, manager: AppWidgetManager, appWidgetId: Int): Boolean =
+            widgetWidth(context, manager, appWidgetId) != WidgetWidth.COMPACT
+
+        /** Re-splits a countdown such as "1 month · 14 days · 12 hours 48 minutes" into two even lines. */
+        private fun balanceCountdown(text: String): String {
+            val parts = text.replace("\n", " · ").split(" · ").filter { it.isNotBlank() }
+            if (parts.size < 2) return text
+            val firstLine = (parts.size + 1) / 2
+            return parts.take(firstLine).joinToString(" · ") + "\n" + parts.drop(firstLine).joinToString(" · ")
+        }
+
         private fun layoutForSize(context: Context, appWidgetId: Int): Int {
             // The widget picker exposes exactly two fixed providers. Each provider
             // has resizeMode="none", so this mapping is based on the provider class
@@ -546,6 +696,15 @@ open class DateReminderWidget : AppWidgetProvider() {
             return when (providerName) {
                 SmallDateReminderWidget::class.java.name -> R.layout.widget_date_reminder_small
                 WideDateReminderWidget::class.java.name -> R.layout.widget_date_reminder_wide
+                // Resizable widget: only 2 to 4 cells wide, so only two layouts are ever needed.
+                ResizableDayCalcyWidget::class.java.name -> {
+                    val manager = AppWidgetManager.getInstance(context)
+                    when {
+                        isRowHeight(manager, appWidgetId) -> R.layout.widget_date_reminder_row
+                        useWideLayout(context, manager, appWidgetId) -> R.layout.widget_date_reminder_wide
+                        else -> R.layout.widget_date_reminder_small
+                    }
+                }
                 // Compatibility fallback for an old widget ID during an upgrade.
                 else -> R.layout.widget_date_reminder_small
             }
@@ -578,12 +737,16 @@ open class DateReminderWidget : AppWidgetProvider() {
 
             val isSmall = layoutId == R.layout.widget_date_reminder_small
             val isWide = layoutId == R.layout.widget_date_reminder_wide
+            val medium = isWide && widgetWidth(context, manager, appWidgetId) == WidgetWidth.MEDIUM
+            val isRow = layoutId == R.layout.widget_date_reminder_row
+            val rowWidth = if (isRow) widgetWidth(context, manager, appWidgetId) else WidgetWidth.COMPACT
             val hasSelection = reminder != null || isYearProgress
 
             applyWidgetPalette(context, views, reminder)
             views.setViewVisibility(R.id.widget_ring, if (hasSelection) android.view.View.VISIBLE else android.view.View.GONE)
             if (hasSelection) {
                 val ringSizeDp = when {
+                    isRow -> 28
                     isSmall -> 30
                     else -> 34
                 }
@@ -601,6 +764,10 @@ open class DateReminderWidget : AppWidgetProvider() {
             views.setViewVisibility(R.id.widget_weekday, android.view.View.GONE)
             views.setViewVisibility(R.id.widget_small_days, android.view.View.GONE)
             views.setTextViewText(R.id.widget_small_days, "")
+
+            if (medium) {
+                views.setTextViewTextSize(R.id.widget_countdown, android.util.TypedValue.COMPLEX_UNIT_SP, 13f)
+            }
 
             if (isWide) {
                 views.setViewVisibility(R.id.widget_year_ends_label, android.view.View.GONE)
@@ -622,12 +789,19 @@ open class DateReminderWidget : AppWidgetProvider() {
                         views.setViewVisibility(R.id.widget_total_days, android.view.View.VISIBLE)
                         views.setTextViewText(R.id.widget_weekday, "")
                         views.setViewVisibility(R.id.widget_weekday, android.view.View.GONE)
+                    } else if (isRow) {
+                        views.setTextViewText(
+                            R.id.widget_title,
+                            if (rowWidth == WidgetWidth.WIDE) "Year Progress" else progress.year.toString()
+                        )
+                        views.setTextViewText(R.id.widget_date, "${progress.daysPassed} days passed")
+                        views.setTextViewText(R.id.widget_countdown, yearRowCountdown(progress, rowWidth))
                     } else if (isWide) {
                         views.setTextViewText(R.id.widget_title, "Year Progress")
                         views.setTextViewText(R.id.widget_date, currentDateTimeText(LocalDateTime.now(ZoneId.systemDefault())))
                         views.setTextViewText(R.id.widget_year_ends_label, "${progress.year} ends in")
                         views.setViewVisibility(R.id.widget_year_ends_label, android.view.View.VISIBLE)
-                        views.setTextViewText(R.id.widget_countdown, progress.remainingText)
+                        views.setTextViewText(R.id.widget_countdown, if (medium) balanceCountdown(progress.remainingText) else progress.remainingText)
                         views.setTextViewText(R.id.widget_total_days, "${progress.daysPassed} days passed")
                         views.setViewVisibility(R.id.widget_total_days, android.view.View.VISIBLE)
                         views.setTextViewText(R.id.widget_weekday, "")
@@ -670,8 +844,12 @@ open class DateReminderWidget : AppWidgetProvider() {
                     val now = LocalDateTime.now(ZoneId.systemDefault())
                     val today = now.toLocalDate()
                     val target = reminderTarget(reminder, now)
-                    val countdown = widgetCountdownText(now, target, isSmall, isWide)
-                    views.setTextViewText(R.id.widget_date, widgetDateText(now, reminder, isWide))
+                    val countdown = if (isRow) rowCountdownText(now, target, rowWidth)
+                        else widgetCountdownText(now, target, isSmall, isWide, medium)
+                    views.setTextViewText(
+                        R.id.widget_date,
+                        if (isRow) rowDateText(now, reminder, target, rowWidth) else widgetDateText(now, reminder, isWide)
+                    )
                     views.setTextViewText(R.id.widget_countdown, countdown)
                     views.setTextViewText(R.id.widget_total_days, totalDaysText(today, reminderTarget(reminder, now).toLocalDate()).removePrefix("Total: "))
                     if (isSmall) {
@@ -696,6 +874,16 @@ open class DateReminderWidget : AppWidgetProvider() {
                         views.setTextViewText(R.id.widget_weekday, "")
                     }
                 }
+            }
+
+            // The 2-cell strip has no room for the date line.
+            // Set it both ways: when the launcher keeps the same layout while the widget is
+            // resized, it only re-applies these changes, so an old GONE would otherwise stay.
+            if (isRow) {
+                views.setViewVisibility(
+                    R.id.widget_date,
+                    if (rowWidth == WidgetWidth.COMPACT) android.view.View.GONE else android.view.View.VISIBLE
+                )
             }
 
             // Every unconfigured/invalid widget opens the SAME MainActivity-based
@@ -750,6 +938,12 @@ class SmallDateReminderWidget : DateReminderWidget()
 
 /** Fixed 4×2 wide widget provider. It cannot be arbitrarily resized by the launcher. */
 class WideDateReminderWidget : DateReminderWidget()
+
+/**
+ * One resizable widget for a date reminder or a saved tracker. It is 2 to 4 cells wide and
+ * 1 or 2 cells tall: 2-row sizes use the compact/wide layouts, 1-row sizes use a text strip.
+ */
+class ResizableDayCalcyWidget : DateReminderWidget()
 
 /** To-do list widget that the launcher can resize freely (width and height). Always shows the to-do list. */
 class ResizableTodoWidget : DateReminderWidget()

@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical"
+    android:padding="6dp" android:background="@drawable/widget_background_light" android:clipToOutline="true">
+    <LinearLayout android:layout_width="match_parent" android:layout_height="32dp" android:gravity="center_vertical" android:orientation="horizontal">
+        <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:paddingStart="5dp"
+            android:text="3 TO-DOS" android:textSize="14sp" android:textStyle="bold" android:textColor="#111111"
+            android:fontFamily="sans-serif-black" android:includeFontPadding="false" />
+        <TextView android:layout_width="30dp" android:layout_height="30dp" android:layout_marginEnd="1dp" android:gravity="center"
+            android:text="+" android:textSize="21sp" android:textColor="#111111" android:background="@drawable/todo_add_button_light"
+            android:includeFontPadding="false" />
+    </LinearLayout>
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:paddingTop="3dp">
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="32dp"
+            android:layout_marginTop="2dp" android:gravity="center_vertical" android:orientation="horizontal"
+            android:paddingStart="3dp" android:paddingEnd="2dp" android:paddingTop="3dp" android:paddingBottom="3dp"
+            android:background="@drawable/todo_task_background_light">
+            <ImageView android:layout_width="30dp" android:layout_height="25dp" android:paddingEnd="5dp"
+                android:src="@drawable/ic_todo_circle_light" android:contentDescription="Task status" />
+            <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
+                android:text="Call the bank" android:textSize="12sp" android:textColor="#191919" android:fontFamily="sans-serif-medium"
+                android:includeFontPadding="false" android:maxLines="1" android:ellipsize="end" />
+        </LinearLayout>
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="32dp"
+            android:layout_marginTop="2dp" android:gravity="center_vertical" android:orientation="horizontal"
+            android:paddingStart="3dp" android:paddingEnd="2dp" android:paddingTop="3dp" android:paddingBottom="3dp"
+            android:background="@drawable/todo_task_background_light">
+            <ImageView android:layout_width="30dp" android:layout_height="25dp" android:paddingEnd="5dp"
+                android:src="@drawable/ic_todo_circle_light" android:contentDescription="Task status" />
+            <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
+                android:text="Pay tax" android:textSize="12sp" android:textColor="#191919" android:fontFamily="sans-serif-medium"
+                android:includeFontPadding="false" android:maxLines="1" android:ellipsize="end" />
+        </LinearLayout>
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="32dp"
+            android:layout_marginTop="2dp" android:gravity="center_vertical" android:orientation="horizontal"
+            android:paddingStart="3dp" android:paddingEnd="2dp" android:paddingTop="3dp" android:paddingBottom="3dp"
+            android:background="@drawable/todo_task_background_light">
+            <ImageView android:layout_width="30dp" android:layout_height="25dp" android:paddingEnd="5dp"
+                android:src="@drawable/ic_todo_circle_light" android:contentDescription="Task status" />
+            <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
+                android:text="Book tickets" android:textSize="12sp" android:textColor="#191919" android:fontFamily="sans-serif-medium"
+                android:includeFontPadding="false" android:maxLines="1" android:ellipsize="end" />
+        </LinearLayout>
+    </LinearLayout>
+</LinearLayout>

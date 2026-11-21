@@ -34,6 +34,26 @@ internal object ReminderDateMath {
     }
 
     /**
+     * Compact countdown for the small widget, used only when the remaining time
+     * includes years, e.g. "1 year" then "1m 13d" on a second line. Returns null when there are no years so
+     * callers keep the normal full-word text.
+     */
+    fun compactYearCountdown(from: LocalDate, to: LocalDate): String? {
+        if (to.isEqual(from)) return null
+        val isPast = to.isBefore(from)
+        val period = if (isPast) Period.between(to, from) else Period.between(from, to)
+        if (period.years <= 0) return null
+        // Years on the first line, months and days on the second, e.g.
+        // "1 year" / "1m 13d". Zero months or days are left out.
+        val years = "${period.years} ${plural(period.years.toLong(), "year")}"
+        val rest = mutableListOf<String>()
+        if (period.months > 0) rest += "${period.months}m"
+        if (period.days > 0) rest += "${period.days}d"
+        val suffix = if (isPast) " ago" else ""
+        return if (rest.isEmpty()) years + suffix else years + "\n" + rest.joinToString(" ") + suffix
+    }
+
+    /**
      * Exact calendar-and-clock countdown. Non-zero years, months, days, hours,
      * and minutes are included in that order. The calendar portion is calculated
      * first and the remaining clock duration is then derived from that anchor,
@@ -111,6 +131,34 @@ internal object ReminderDateMath {
         if (!to.isAfter(from)) return "Due now"
         val parts = preciseCountdownParts(from, to)
         return if (parts.isEmpty()) "Due now" else parts.joinToString(" ") + " remaining"
+    }
+
+    /**
+     * Single-line countdown for the 1-row widget strip. level 0 = compact ("1y 1m 13d"),
+     * level 1 = medium (full words, "1 year 8 months 9 days"),
+     * level 2 = full words joined with " · ".
+     */
+    fun rowCountdown(from: LocalDate, to: LocalDate, level: Int): String {
+        if (!to.isAfter(from)) return calendarCountdown(from, to)
+        val period = Period.between(from, to)
+        val y = period.years
+        val m = period.months
+        val d = period.days
+        if (level >= 2) {
+            val parts = mutableListOf<String>()
+            if (y > 0) parts += "$y ${plural(y.toLong(), "year")}"
+            if (m > 0) parts += "$m ${plural(m.toLong(), "month")}"
+            if (d > 0) parts += "$d ${plural(d.toLong(), "day")}"
+            return if (parts.isEmpty()) calendarCountdown(from, to) else parts.joinToString(" · ")
+        }
+        val rest = mutableListOf<String>()
+        if (m > 0) rest += "${m}m"
+        if (d > 0) rest += "${d}d"
+        if (level == 1) return calendarCountdown(from, to)
+        val parts = mutableListOf<String>()
+        if (y > 0) parts += "${y}y"
+        parts += rest
+        return if (parts.isEmpty()) calendarCountdown(from, to) else parts.joinToString(" ")
     }
 
     private fun plural(value: Long, singular: String): String =

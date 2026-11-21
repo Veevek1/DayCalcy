@@ -1,5 +1,19 @@
 # Changelog
 
+## 3.44.2
+
+### New
+- One resizable widget for a reminder or a tracker. Stretch it from 2 to 4 cells wide. Your existing widgets keep working.
+- The widget can now be made one row tall.
+- Added widget previews.
+
+### Improvements
+- Smaller month and day pickers.
+- Simplified the Saved Tracker widgets. The small widget shows the name, the value and one progress bar. The large widget adds a slim time bar with the end date.
+
+### Fixes
+- Fixed the reminder widget ring starting empty on a newly added widget.
+
 ## 3.44.1
 
 ### New
